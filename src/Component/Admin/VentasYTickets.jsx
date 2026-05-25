@@ -18,7 +18,6 @@ async function apiFetch(url, opts = {}) {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const IGV_RATE = 0.18
-const CARGO_SERVICIO = 2.00
 
 function detectTipo(tx) {
   const hasBoletos = tx.boletos?.length > 0
@@ -29,10 +28,7 @@ function detectTipo(tx) {
   return 'Solo Entrada'
 }
 
-// Para la lista (sin boletos/snacks expandidos), inferimos por monto vs lógica de negocio
-// El backend no devuelve tipo, así que usamos un campo opcional o fallback
 function detectTipoFromListItem(tx) {
-  // Si el backend en el futuro devuelve tx.tipo, usarlo; si no, "Solo Entrada" por defecto
   return tx.tipo || 'Solo Entrada'
 }
 
@@ -43,6 +39,11 @@ function calcSummary(detail) {
   const totalReal     = entradasReal + dulceriaReal - descuento
 
   const cargos        = 2.00
+
+  if (totalReal === 0) {
+    return { entradas: 0, dulceria: 0, descuento, cargos, igv: 0, total: 0, entradasReal, dulceriaReal }
+  }
+
   const sinCargos     = totalReal - cargos
   const igv           = parseFloat((sinCargos * IGV_RATE / (1 + IGV_RATE)).toFixed(2))
   const ratio         = sinCargos / totalReal
@@ -50,19 +51,16 @@ function calcSummary(detail) {
   const dulceriaNet   = parseFloat((sinCargos - igv - entradasNet).toFixed(2))
 
   return {
-    // Para el resumen de pago (ajustados para que encajen)
     entradas:     entradasNet,
     dulceria:     dulceriaNet,
     descuento,
     cargos,
     igv,
     total:        totalReal,
-    // Para productos adquiridos (valores reales)
     entradasReal,
     dulceriaReal,
   }
 }
-
 
 function fmtMoney(n) {
   return `S/ ${parseFloat(n).toFixed(2)}`
@@ -89,8 +87,8 @@ function EstadoBadge({ estado }) {
     Cancelada:   { bg: '#F3F4F6', text: '#6B7280' },
     Aprobada:    { bg: '#DCFCE7', text: '#008236' },
     Rechazada:   { bg: '#FFE5DC', text: '#C2410C' },
-    Válida:      { bg: '#DCFCE7', text: '#008236' },
-    Inválida:    { bg: '#FFE5DC', text: '#C2410C' },
+    'Válida':    { bg: '#DCFCE7', text: '#008236' },
+    'Inválida':  { bg: '#FFE5DC', text: '#C2410C' },
     'Ya Usada':  { bg: '#FEF9C3', text: '#B45309' },
     Pagado:      { bg: '#DCFCE7', text: '#008236' },
     Cancelado:   { bg: '#F3F4F6', text: '#6B7280' },
@@ -182,6 +180,36 @@ function PaginationBar({ page, totalPages, onPrev, onNext }) {
   )
 }
 
+// ─── SUBCOMPONENTES DE DETALLE (fuera de TabDetalle para evitar recreación) ──
+function DetalleCard({ children, style }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 24, ...style }}>
+      {children}
+    </div>
+  )
+}
+
+function DetalleSectionTitle({ children }) {
+  return (
+    <div style={{ borderBottom: '1px solid #E5E7EB', paddingBottom: 12, marginBottom: 18 }}>
+      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#121212' }}>{children}</h3>
+    </div>
+  )
+}
+
+function DetalleInfoGrid({ fields }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 24px' }}>
+      {fields.map(([lbl, val]) => (
+        <div key={lbl}>
+          <p style={{ margin: '0 0 3px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{lbl}</p>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>{val || '—'}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── FECHA MAP (dropdown → param backend) ─────────────────────────────────────
 const FECHA_OPTIONS = [
   { label: 'Cualquier fecha', value: '' },
@@ -191,11 +219,11 @@ const FECHA_OPTIONS = [
 ]
 
 const TIPO_OPTIONS = [
-  { label: 'Todos los tipos',   value: '' },
-  { label: 'Solo Entrada',      value: 'Solo Entrada' },
-  { label: 'Entrada + Dulcería',value: 'Entrada + Dulcería' },
-  { label: 'Solo Dulcería',     value: 'Solo Dulcería' },
-  { label: 'Combo',             value: 'Combo' },
+  { label: 'Todos los tipos',    value: '' },
+  { label: 'Solo Entrada',       value: 'Solo Entrada' },
+  { label: 'Entrada + Dulcería', value: 'Entrada + Dulcería' },
+  { label: 'Solo Dulcería',      value: 'Solo Dulcería' },
+  { label: 'Combo',              value: 'Combo' },
 ]
 
 // ─── TAB: HISTORIAL ───────────────────────────────────────────────────────────
@@ -229,7 +257,6 @@ function TabHistorial({ onSelectTransaction }) {
   const transactions = data?.data || []
   const totalPages   = data?.totalPages || data?.total_pages || 1
 
-  // Filtro tipo client-side (el backend no lo soporta aún)
   const filtered = tipo
     ? transactions.filter(tx => detectTipoFromListItem(tx) === tipo)
     : transactions
@@ -243,7 +270,6 @@ function TabHistorial({ onSelectTransaction }) {
 
   return (
     <div>
-      {/* Métricas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
         {metricas.map(card => (
           <div key={card.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 20 }}>
@@ -257,7 +283,6 @@ function TabHistorial({ onSelectTransaction }) {
         ))}
       </div>
 
-      {/* Filtros */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '18px 20px', marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <SearchInput label="Buscar" placeholder="ID reserva, cliente, película" value={buscarTemp} onChange={setBuscarTemp} />
@@ -290,7 +315,6 @@ function TabHistorial({ onSelectTransaction }) {
         </div>
       </div>
 
-      {/* Tabla */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px 12px' }}>
           <h3 style={{ fontSize: 17, fontWeight: 700, color: '#121212', margin: 0 }}>Historial global de transacciones</h3>
@@ -312,16 +336,12 @@ function TabHistorial({ onSelectTransaction }) {
                filtered.map(tx => (
                 <tr key={tx.id_reserva} style={{ borderTop: '1px solid #F3F4F6' }}>
                   <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600 }}>#{tx.id_reserva}</td>
-                  <td style={{ padding: '10px 14px', color: '#4A5565', whiteSpace: 'nowrap' }}>
-                    {fmtDate(tx.fecha_compra)}
-                  </td>
+                  <td style={{ padding: '10px 14px', color: '#4A5565', whiteSpace: 'nowrap' }}>{fmtDate(tx.fecha_compra)}</td>
                   <td style={{ padding: '10px 14px', color: '#121212' }}>{tx.cliente || '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#4A5565', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.pelicula || '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#4A5565' }}>{tx.sala || '—'}</td>
                   <td style={{ padding: '10px 14px' }}><TipoBadge tipo={detectTipoFromListItem(tx)} /></td>
-                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>
-                    {tx.monto_total != null ? fmtMoney(tx.monto_total) : '—'}
-                  </td>
+                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{tx.monto_total != null ? fmtMoney(tx.monto_total) : '—'}</td>
                   <td style={{ padding: '10px 14px' }}><EstadoBadge estado={tx.estado_pago} /></td>
                   <td style={{ padding: '10px 14px' }}>
                     <button onClick={() => onSelectTransaction(tx.id_reserva)}
@@ -378,35 +398,12 @@ function TabDetalle({ reservationId, onBack }) {
   const asientos    = (data.boletos || []).map(b => b.asiento).join(', ')
   const summary     = calcSummary(data)
 
+  // historialTx sigue siendo datos locales, no un componente — está bien aquí
   const historialTx = [
-    { label: 'Compra completada',          fecha: data.fecha_reserva },
+    { label: 'Compra completada',           fecha: data.fecha_reserva },
     { label: 'Pago confirmado por pasarela', fecha: data.fecha_reserva },
     { label: 'Carrito iniciado por cliente', fecha: data.fecha_reserva },
   ]
-
-  // ── sub-components scoped ──
-  const Card = ({ children, style }) => (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 24, ...style }}>
-      {children}
-    </div>
-  )
-
-  const SectionTitle = ({ children }) => (
-    <div style={{ borderBottom: '1px solid #E5E7EB', paddingBottom: 12, marginBottom: 18 }}>
-      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#121212' }}>{children}</h3>
-    </div>
-  )
-
-  const InfoGrid = ({ fields }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 24px' }}>
-      {fields.map(([lbl, val]) => (
-        <div key={lbl}>
-          <p style={{ margin: '0 0 3px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{lbl}</p>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>{val || '—'}</p>
-        </div>
-      ))}
-    </div>
-  )
 
   return (
     <div>
@@ -443,38 +440,35 @@ function TabDetalle({ reservationId, onBack }) {
         {/* ── Columna izquierda ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Información del cliente */}
-          <Card>
-            <SectionTitle>Información del Cliente</SectionTitle>
-            <InfoGrid fields={[
-              ['Nombre',          data.cliente],
-              ['Documento',       data.documento || '—'],
-              ['Email',           data.correo],
-              ['Teléfono',        data.telefono || '—'],
-              ['Canal de venta',  'Web Online'],
-              ['Método de pago',  data.metodo_pago],
+          <DetalleCard>
+            <DetalleSectionTitle>Información del Cliente</DetalleSectionTitle>
+            <DetalleInfoGrid fields={[
+              ['Nombre',         data.cliente],
+              ['Documento',      data.documento || '—'],
+              ['Email',          data.correo],
+              ['Teléfono',       data.telefono || '—'],
+              ['Canal de venta', 'Web Online'],
+              ['Método de pago', data.metodo_pago],
             ]} />
-          </Card>
+          </DetalleCard>
 
-          {/* Detalle de la función */}
-          <Card>
-            <SectionTitle>Detalle de la Función</SectionTitle>
-            <InfoGrid fields={[
-              ['Película',    data.pelicula],
-              ['Formato',     [funcion.idioma, funcion.formato].filter(Boolean).join(' · ') || '—'],
+          <DetalleCard>
+            <DetalleSectionTitle>Detalle de la Función</DetalleSectionTitle>
+            <DetalleInfoGrid fields={[
+              ['Película',     data.pelicula],
+              ['Formato',      [funcion.idioma, funcion.formato].filter(Boolean).join(' · ') || '—'],
               ['Fecha y hora', fechaInicio
                 ? fechaInicio.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
                   ' – ' + fechaInicio.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ' hrs'
                 : '—'],
-              ['Sala',        data.sala],
-              ['Asientos',    asientos || '—'],
-              ['Duración',    duracion],
+              ['Sala',         data.sala],
+              ['Asientos',     asientos || '—'],
+              ['Duración',     duracion],
             ]} />
-          </Card>
+          </DetalleCard>
 
-          {/* Productos adquiridos */}
-          <Card>
-            <SectionTitle>Productos Adquiridos</SectionTitle>
+          <DetalleCard>
+            <DetalleSectionTitle>Productos Adquiridos</DetalleSectionTitle>
             {data.boletos?.length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <div>
@@ -496,22 +490,21 @@ function TabDetalle({ reservationId, onBack }) {
             {!data.boletos?.length && !data.snacks?.length && (
               <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0 }}>Sin productos registrados.</p>
             )}
-          </Card>
+          </DetalleCard>
         </div>
 
         {/* ── Columna derecha ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Resumen de pago */}
-          <Card>
-            <SectionTitle>Resumen de Pago</SectionTitle>
+          <DetalleCard>
+            <DetalleSectionTitle>Resumen de Pago</DetalleSectionTitle>
             <div style={{ fontSize: 14 }}>
               {[
-                { label: `Entradas (×${data.boletos?.length || 0})`, val: summary.entradas,           color: '#121212' },
-                { label: 'Dulcería',                                  val: summary.dulceria,            color: '#121212' },
-                { label: 'Cargos por servicio',                       val: summary.cargos,              color: '#121212' },
-                { label: 'Descuentos aplicados',                      val: -summary.descuento,          color: '#008236', hide: summary.descuento === 0 },
-                { label: 'IGV (18%)',                                  val: summary.igv,                 color: '#121212' },
+                { label: `Entradas (×${data.boletos?.length || 0})`, val: summary.entradas,  color: '#121212' },
+                { label: 'Dulcería',                                  val: summary.dulceria,  color: '#121212' },
+                { label: 'Cargos por servicio',                       val: summary.cargos,    color: '#121212' },
+                { label: 'Descuentos aplicados',                      val: -summary.descuento, color: '#008236', hide: summary.descuento === 0 },
+                { label: 'IGV (18%)',                                  val: summary.igv,       color: '#121212' },
               ].filter(r => !r.hide).map((row, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: i === 0 ? '1px solid #F3F4F6' : 'none' }}>
                   <span style={{ color: '#6B7280' }}>{row.label}</span>
@@ -525,11 +518,10 @@ function TabDetalle({ reservationId, onBack }) {
                 <span style={{ fontWeight: 700, fontSize: 16 }}>{fmtMoney(summary.total)}</span>
               </div>
             </div>
-          </Card>
+          </DetalleCard>
 
-          {/* Historial de la transacción */}
-          <Card>
-            <SectionTitle>Historial de la Transacción</SectionTitle>
+          <DetalleCard>
+            <DetalleSectionTitle>Historial de la Transacción</DetalleSectionTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {historialTx.map((h, i) => {
                 const d = h.fecha ? new Date(h.fecha) : null
@@ -548,18 +540,14 @@ function TabDetalle({ reservationId, onBack }) {
                 )
               })}
             </div>
-          </Card>
+          </DetalleCard>
 
-          {/* Entradas generadas */}
           {data.boletos?.length > 0 && (
-            <Card>
-              <SectionTitle>Entradas Generadas</SectionTitle>
+            <DetalleCard>
+              <DetalleSectionTitle>Entradas Generadas</DetalleSectionTitle>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {data.boletos.map((b, i) => (
-                  <div key={b.id_boleto} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 8,
-                  }}>
+                  <div key={b.id_boleto} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 8 }}>
                     <div>
                       <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#283593' }}>
                         TICKET #{data.transaccion_id || data.id_reserva}-{String.fromCharCode(65 + i)}
@@ -580,7 +568,7 @@ function TabDetalle({ reservationId, onBack }) {
                   </div>
                 ))}
               </div>
-            </Card>
+            </DetalleCard>
           )}
         </div>
       </div>
@@ -617,10 +605,10 @@ function TabDevoluciones() {
   const metrics      = data?.metricas || data?.metrics || {}
 
   const metricas = [
-    { label: 'Solicitudes Totales', value: metrics.ventasMes ?? metrics.total_ventas ?? '—',     sub: 'Este mes',            iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
-    { label: 'Pendientes',          value: '—',                                                    sub: 'Requieren revisión',  iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
-    { label: 'Reembolsadas',        value: metrics.reembolsos ?? metrics.total_reembolsos ?? '—', sub: 'Reembolso procesado',  iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
-    { label: 'Monto Devuelto',      value: '—',                                                    sub: 'Total mes',           iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
+    { label: 'Solicitudes Totales', value: metrics.ventasMes ?? metrics.total_ventas ?? '—',     sub: 'Este mes',           iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
+    { label: 'Pendientes',          value: '—',                                                    sub: 'Requieren revisión', iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
+    { label: 'Reembolsadas',        value: metrics.reembolsos ?? metrics.total_reembolsos ?? '—', sub: 'Reembolso procesado', iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
+    { label: 'Monto Devuelto',      value: '—',                                                    sub: 'Total mes',          iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
   ]
 
   return (
@@ -725,7 +713,6 @@ function TabValidacion() {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
-        {/* Scanner */}
         <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 20 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: '#121212', margin: '0 0 14px', textAlign: 'center' }}>Validar entrada</h3>
           <div style={{ background: '#F3F4F6', borderRadius: 8, padding: 20, marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -763,11 +750,10 @@ function TabValidacion() {
           )}
         </div>
 
-        {/* Stats sesión */}
         {[
-          { label: 'Entradas validadas (sesión)', value: validadas,  color: '#008236' },
-          { label: 'Sin usar / pendientes',       value: '—',        color: '#9CA3AF' },
-          { label: 'Intentos inválidos (sesión)', value: invalidas,  color: '#C2410C' },
+          { label: 'Entradas validadas (sesión)', value: validadas, color: '#008236' },
+          { label: 'Sin usar / pendientes',       value: '—',       color: '#9CA3AF' },
+          { label: 'Intentos inválidos (sesión)', value: invalidas, color: '#C2410C' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 36, fontWeight: 700, color: s.value === '—' ? '#9CA3AF' : s.color }}>{s.value}</span>
@@ -819,7 +805,7 @@ const TABS = [
 ]
 
 export default function VentasYTickets() {
-  const [tabActiva,            setTabActiva]            = useState(0)
+  const [tabActiva,             setTabActiva]             = useState(0)
   const [selectedReservationId, setSelectedReservationId] = useState(null)
 
   const handleSelectTransaction = (id) => {
@@ -836,7 +822,6 @@ export default function VentasYTickets() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', borderBottom: '2px solid #E5E7EB' }}>
           {TABS.map((tab, i) => (
@@ -851,12 +836,7 @@ export default function VentasYTickets() {
       </div>
 
       {tabActiva === 0 && <TabHistorial onSelectTransaction={handleSelectTransaction} />}
-      {tabActiva === 1 && (
-        <TabDetalle
-          reservationId={selectedReservationId}
-          onBack={() => setTabActiva(0)}
-        />
-      )}
+      {tabActiva === 1 && <TabDetalle reservationId={selectedReservationId} onBack={() => setTabActiva(0)} />}
       {tabActiva === 2 && <TabDevoluciones />}
       {tabActiva === 3 && <TabValidacion />}
     </div>

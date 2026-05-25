@@ -1,0 +1,40 @@
+/* ─── MovieCard ─────────────────────────────────────────────────────────────── */
+.movie-card {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s;
+}
+
+.movie-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* ─── Botones de acción ──────────────────────────────────────────────────────── */
+.movie-card-btn {
+  background: transparent;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #9CA3AF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex: 1;
+}
+
+.movie-card-btn:hover {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+.movie-card-btn.btn-del:hover {
+  background: #FEF2F2;
+  color: #EF4444;
+}

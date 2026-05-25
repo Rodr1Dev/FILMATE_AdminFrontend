@@ -162,8 +162,10 @@ export default function MenuPrincipal({ activeIndex, onNavigate }) {
 
         <div className="sb-footer">
           <button className="sb-help">
-            <span style={{ display: 'flex', alignItems: 'center' }}><Icon name="help" /></span>
-            Ayuda y Soporte
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <Icon name="help" />
+            </span>
+            <span>Ayuda y Soporte</span>
           </button>
           <div className="sb-user">
             <div className="sb-avatar">EF</div>

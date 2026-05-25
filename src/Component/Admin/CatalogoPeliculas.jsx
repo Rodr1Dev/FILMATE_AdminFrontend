@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import './CatalogoPeliculas.css'
 
 // ─── API Configuration ────────────────────────────────────────────────────────
 const API_BASE = '/api'
@@ -101,7 +102,7 @@ function frontendToBackend(f) {
     categoria_cartelera: f.categoria     || 'Proximamente',
     estado_registro:     f.estado        || 'Activo',
     generos: f.generos || [],
-    elenco:              [],  // ← vacío, sin tocar BD
+    elenco:              [],
   }
 }
 
@@ -147,10 +148,26 @@ const ICON_CHECK   = "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3"
 const ICON_WARN    = "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"
 const ICON_REFRESH = "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
 
+// ─── FIX 1: Overlay con role="dialog", aria-modal y cierre con Escape ────────
 function Overlay({ children, onClose }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
         {children}
       </div>
     </div>
@@ -450,11 +467,16 @@ function VerPelicula({ movie, onClose }) {
                   frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen style={{ borderRadius: 10 }} />
               ) : (
-                <div style={{ background: '#1C2566', borderRadius: 10, padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer' }}
-                  onClick={() => window.open(movie.trailer, '_blank')}>
+                // ─── FIX 2: <div> clickeable → <a> semántico ─────────────────
+                <a
+                  href={movie.trailer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: '#1C2566', borderRadius: 10, padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer', textDecoration: 'none' }}
+                >
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M5 3l14 9-14 9V3z"/></svg>
                   <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>VER TRÁILER OFICIAL</span>
-                </div>
+                </a>
               )}
             </div>
           )}
@@ -464,13 +486,10 @@ function VerPelicula({ movie, onClose }) {
   )
 }
 
-// ─── Movie card ───────────────────────────────────────────────────────────────
+// ─── FIX 3: MovieCard hover manejado en CatalogoPeliculas.css ────────────────
 function MovieCard({ movie, onEdit, onVer, onEliminar }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s' }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.12)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)'}>
-
+    <div className="movie-card">
       {/* Poster */}
       <div style={{ height: 190, background: '#1C2566', position: 'relative', overflow: 'hidden' }}>
         {movie.poster
@@ -510,18 +529,9 @@ function MovieCard({ movie, onEdit, onVer, onEliminar }) {
 
       {/* Actions */}
       <div style={{ padding: '10px 14px', borderTop: '1px solid #F3F4F6', display: 'flex', gap: 8 }}>
-        {[
-          { icon: ICON_EDIT, onClick: onEdit,     title: 'Editar',   color: '#6B7280', hoverBg: '#F3F4F6' },
-          { icon: ICON_EYE,  onClick: onVer,      title: 'Ver',      color: '#6B7280', hoverBg: '#F3F4F6' },
-          { icon: ICON_DEL,  onClick: onEliminar, title: 'Eliminar', color: '#EF4444', hoverBg: '#FEF2F2' },
-        ].map((btn, i) => (
-          <button key={i} onClick={btn.onClick} title={btn.title}
-            onMouseEnter={e => { e.currentTarget.style.background = btn.hoverBg; e.currentTarget.style.color = btn.color }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9CA3AF' }}
-            style={{ background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', color: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease', flex: 1 }}>
-            <Icon d={btn.icon} size={15} />
-          </button>
-        ))}
+        <button className="movie-card-btn" onClick={onEdit}     title="Editar"><Icon d={ICON_EDIT} size={15} /></button>
+        <button className="movie-card-btn" onClick={onVer}      title="Ver"><Icon d={ICON_EYE}  size={15} /></button>
+        <button className="movie-card-btn btn-del" onClick={onEliminar} title="Eliminar"><Icon d={ICON_DEL}  size={15} /></button>
       </div>
     </div>
   )
@@ -587,10 +597,7 @@ export default function CatalogoPeliculas() {
         api.categories(),
         api.classifications()
       ])
-
-      // Asegurarse de que los metadatos sean arrays de strings o con la forma {nombre}
       setGenres(genresData || [])
-      // Si categories/classifications vienen como strings, los dejamos igual, si vienen como objetos extraemos nombre
       setCategories((categoriesData || []).map(c => typeof c === 'string' ? c : c.nombre))
       setClassifications((classificationsData || []).map(c => typeof c === 'string' ? c : c.nombre))
     } catch (e) {
