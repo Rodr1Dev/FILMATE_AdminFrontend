@@ -1,205 +1,189 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import './CatalogoPeliculas.css'
 
-// ─── Sample data (referential mockup – replace with API calls) ───────────────
-const SAMPLE_MOVIES = [
-  {
-    id: 1, titulo: 'DUNE PARTE 2', genero: 'Ciencia Ficción', estado: 'Activo',
-    clasificacion: 'PG-13', duracion: '2h 46 min', fecha: '28/03/2024',
-    director: 'Denis Villeneuve',
-    sinopsis: 'Dune: Parte Dos (2024) sigue a Paul Atreides uniendo fuerzas con Chani y los Fremen para vengarse de los conspiradores que destruyeron a su familia.',
-    elenco: 'Timothée Chalamet, Zendaya, Rebecca Ferguson, Javier Bardem, Josh Brolin, Austin Butler',
-    trailer: 'https://youtu.be/jg4-ErdQuXI',
-    poster: 'https://image.tmdb.org/t/p/w342/8b8R8l88Qje9dn9OE8PY05Nxl1X.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg',
-  },
-  {
-    id: 2, titulo: 'OPPENHEIMER', genero: 'Drama', estado: 'Activo',
-    clasificacion: 'PG-13', duracion: '3h 00 min', fecha: '21/07/2023',
-    director: 'Christopher Nolan',
-    sinopsis: 'La historia del físico J. Robert Oppenheimer y su papel en el desarrollo de la bomba atómica durante la Segunda Guerra Mundial.',
-    elenco: 'Cillian Murphy, Emily Blunt, Matt Damon, Robert Downey Jr.',
-    trailer: 'https://youtu.be/uYPbbksJxIg',
-    poster: 'https://image.tmdb.org/t/p/w342/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/rLb2cwF3Pazuxaj0sRXQ037tGI1.jpg',
-  },
-  {
-    id: 3, titulo: 'AVATAR 3', genero: 'Ciencia Ficción', estado: 'Activo',
-    clasificacion: 'APT', duracion: '3h 17 min', fecha: '19/12/2025',
-    director: 'James Cameron',
-    sinopsis: 'La tercera entrega de la saga de Avatar continúa la historia de los Na\'vi en Pandora.',
-    elenco: 'Sam Worthington, Zoe Saldaña, Sigourney Weaver',
-    trailer: 'https://youtu.be/example',
-    poster: 'https://image.tmdb.org/t/p/w342/t6HIqrRAclMCA60NsSmeqe9RmNV.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/eHOzc1JGbFMDjGBXxdEv0pMlNdM.jpg',
-  },
-  {
-    id: 4, titulo: 'BARBIE', genero: 'Comedia / Fantasía', estado: 'En cartelera',
-    clasificacion: '+14', duracion: '1h 54 min', fecha: '21/07/2023',
-    director: 'Greta Gerwig',
-    sinopsis: 'Barbie sufre una crisis existencial y viaja al mundo real junto a Ken para descubrir su verdadero propósito.',
-    elenco: 'Margot Robbie, Ryan Gosling, America Ferrera',
-    trailer: 'https://youtu.be/pBk4NYhWNMM',
-    poster: 'https://image.tmdb.org/t/p/w342/iuFNMS8vlmzxvyjaoHKhOrOihyO.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/nHf61UzkfFno5X1ofIjAVTnI1zH.jpg',
-  },
-  {
-    id: 5, titulo: 'NAPOLEÓN', genero: 'Drama', estado: 'Activo',
-    clasificacion: '+14', duracion: '2h 38 min', fecha: '22/11/2023',
-    director: 'Ridley Scott',
-    sinopsis: 'Un retrato épico del ascenso al poder de Napoleón Bonaparte y su relación con Josefina.',
-    elenco: 'Joaquin Phoenix, Vanessa Kirby',
-    trailer: 'https://youtu.be/OAZWXUkrjPc',
-    poster: 'https://image.tmdb.org/t/p/w342/vcZWJGvB5xydWuUO1vaTLI52YB8.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/jE5o7y9K6pZtWNNMEw3IdpHuncR.jpg',
-  },
-  {
-    id: 6, titulo: 'WONKA', genero: 'Fantasía', estado: 'En cartelera',
-    clasificacion: 'APT', duracion: '1h 56 min', fecha: '15/12/2023',
-    director: 'Paul King',
-    sinopsis: 'Los primeros años y aventuras del joven y excéntrico Willy Wonka antes de fundar su famosa fábrica de chocolate.',
-    elenco: 'Timothée Chalamet, Olivia Colman, Hugh Grant',
-    trailer: 'https://youtu.be/otNh9bTjXWg',
-    poster: 'https://image.tmdb.org/t/p/w342/qhb1qOilapbapxWQn9jtRkgQ5OQ.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/nGL2AbKDBM5dPm6gQAJGMXk3dAS.jpg',
-  },
-  {
-    id: 7, titulo: 'GUARDIANES DE LA GALAXIA 3', genero: 'Ciencia Ficción', estado: 'Activo',
-    clasificacion: '+14', duracion: '2h 30 min', fecha: '05/05/2023',
-    director: 'James Gunn',
-    sinopsis: 'Los Guardianes deben defender a uno de los suyos en una misión que podría marcar el fin del equipo.',
-    elenco: 'Chris Pratt, Zoe Saldana, Bradley Cooper, Vin Diesel',
-    trailer: 'https://youtu.be/u3V5KDHRQvk',
-    poster: 'https://image.tmdb.org/t/p/w342/r2J02Z2OpNTctfOSN1Ydgii51I3.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/5YZbUmjbMa3ClvSW1Wj3D6XGkVA.jpg',
-  },
-  {
-    id: 8, titulo: 'LOS 4 FANTÁSTICOS PRIMEROS PASOS', genero: 'Ciencia Ficción', estado: 'En cartelera',
-    clasificacion: '+14', duracion: '1h 55 min', fecha: '25/07/2025',
-    director: 'Matt Shakman',
-    sinopsis: 'Los Cuatro Fantásticos hacen su debut en el Universo Marvel.',
-    elenco: 'Pedro Pascal, Vanessa Kirby, Joseph Quinn, Ebon Moss-Bachrach',
-    trailer: 'https://youtu.be/example',
-    poster: 'https://image.tmdb.org/t/p/w342/9l1eZiJHmhr5jIlthMdJN5WYoff.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/example.jpg',
-  },
-  {
-    id: 9, titulo: 'SPIDERMAN INTO THE SPIDERVERSE', genero: 'Animación', estado: 'Activo',
-    clasificacion: 'APT', duracion: '2h 20 min', fecha: '14/12/2018',
-    director: 'Bob Persichetti',
-    sinopsis: 'Miles Morales se convierte en Spider-Man y conoce a otros Spider-People de distintos universos.',
-    elenco: 'Shameik Moore, Hailee Steinfeld, Jake Johnson',
-    trailer: 'https://youtu.be/g4Hbz2jLxvQ',
-    poster: 'https://image.tmdb.org/t/p/w342/iiZZdoQBEYBv6id8su7ImL0oCbD.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/lfRkUr7DYdHldAw3kEuSrXMFjTo.jpg',
-  },
-  {
-    id: 10, titulo: 'SUPERMAN', genero: 'Acción', estado: 'En cartelera',
-    clasificacion: '+14', duracion: '2h 09 min', fecha: '11/07/2025',
-    director: 'James Gunn',
-    sinopsis: 'El renacimiento de Superman en el nuevo Universo DC, explorando el equilibrio entre su humanidad y sus orígenes kryptonianos.',
-    elenco: 'David Corenswet, Rachel Brosnahan, Nicholas Hoult',
-    trailer: 'https://youtu.be/example',
-    poster: 'https://image.tmdb.org/t/p/w342/example.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/example.jpg',
-  },
-  {
-    id: 11, titulo: 'SPIDER-MAN: BRAND NEW DAY', genero: 'Ciencia Ficción', estado: 'Próximamente',
-    clasificacion: '+14', duracion: '2h 15 min', fecha: 'TBD',
-    director: 'Desmond Daniel Cretton',
-    sinopsis: 'Peter Parker se enfrenta a un nuevo comienzo después de los eventos del universo cinematográfico.',
-    elenco: 'Tom Holland, Zendaya',
-    trailer: 'https://youtu.be/example',
-    poster: 'https://image.tmdb.org/t/p/w342/example.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/example.jpg',
-  },
-  {
-    id: 12, titulo: 'PARASITE', genero: 'Drama / Suspenso', estado: 'Finalizada',
-    clasificacion: '+14', duracion: '2h 12 min', fecha: '05/06/2019',
-    director: 'Bong Joon-ho',
-    sinopsis: 'La familia Kim, que vive en la pobreza, se infiltra en la vida de la adinerada familia Park de formas inesperadas.',
-    elenco: 'Song Kang-ho, Lee Sun-kyun, Cho Yeo-jeong',
-    trailer: 'https://youtu.be/5xH0HfJHsaY',
-    poster: 'https://image.tmdb.org/t/p/w342/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
-    banner: 'https://image.tmdb.org/t/p/w780/ApiBzeaa95TNYLSKkEWF5wGQPaw.jpg',
-  },
-]
+// ─── API Configuration ────────────────────────────────────────────────────────
+const API_BASE = '/api'
+
+const api = {
+  list:    (skip = 0, limit = 200) => fetch(`${API_BASE}/movies/?skip=${skip}&limit=${limit}`).then(r => r.json()),
+  details: (id)                    => fetch(`${API_BASE}/movies/${id}/details`).then(r => r.json()),
+  create:  (body)                  => fetch(`${API_BASE}/movies/`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
+  update:  (id, body)              => fetch(`${API_BASE}/movies/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
+  delete:  (id)                    => fetch(`${API_BASE}/movies/${id}`, {
+    method: 'DELETE',
+  }).then(r => { if (!r.ok) throw new Error(r.statusText); return r.text().then(t => t ? JSON.parse(t) : {}) }),
+  genres:          () => fetch(`${API_BASE}/movies/meta/genres`).then(r => r.json()),
+  categories:      () => fetch(`${API_BASE}/movies/meta/categories`).then(r => r.json()),
+  classifications: () => fetch(`${API_BASE}/movies/meta/classifications`).then(r => r.json()),
+}
+
+// ─── Helpers para extraer strings de objetos ─────────────────────────────────
+function extractString(value) {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && value.nombre) return value.nombre
+  return ''
+}
+
+function extractGenres(value) {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.map(g => {
+      if (typeof g === 'string') return g
+      if (g && typeof g === 'object' && g.nombre) return g.nombre
+      return String(g)
+    })
+  }
+  return []
+}
+
+// ─── Field mapping ────────────────────────────────────────────────────────────
+function backendToFrontend(m) {
+  if (!m) return {}
+
+  const id = m.id ?? m.id_pelicula ?? null
+
+  const poster  = m.url_poster  || m.poster  || ''
+  const trailer = m.url_trailer || m.trailer || ''
+  const banner  = m.url_banner  || m.banner  || ''
+
+  let duracion = ''
+  if (m.duracion_minutos) {
+    const h   = Math.floor(m.duracion_minutos / 60)
+    const min = m.duracion_minutos % 60
+    duracion  = h > 0 ? `${h}h${min > 0 ? ` ${min} min` : ''}` : `${min} min`
+  } else if (m.duracion) {
+    duracion = m.duracion
+  }
+
+  return {
+    id,
+    titulo:           m.titulo               ?? '',
+    sinopsis:         m.sinopsis             ?? '',
+    duracion,
+    duracion_minutos: m.duracion_minutos      ?? null,
+    clasificacion:    extractString(m.clasificacion_edad) || extractString(m.clasificacion),
+    poster,
+    trailer,
+    banner,
+    generos:          extractGenres(m.generos) || extractGenres(m.genero),
+    categoria:        extractString(m.categoria_cartelera) || extractString(m.categoria) || 'Proximamente',
+    estado:           m.estado_registro      ?? m.estado ?? 'Activo',
+    director:         m.director             ?? '',
+    elenco:           m.elenco               ?? '',
+  }
+}
+
+function frontendToBackend(f) {
+  let duracion_minutos = null
+  if (f.duracion && f.duracion.trim() !== '') {
+    const hMatch = f.duracion.match(/(\d+)\s*h/i)
+    const mMatch = f.duracion.match(/(\d+)\s*min/i)
+    const parsed = (hMatch ? parseInt(hMatch[1]) * 60 : 0) + (mMatch ? parseInt(mMatch[1]) : 0)
+    if (parsed > 0) {
+      duracion_minutos = parsed
+    } else {
+      const solo = parseInt(f.duracion)
+      if (!isNaN(solo) && solo > 0) duracion_minutos = solo
+    }
+  }
+
+  return {
+    titulo:              f.titulo        || null,
+    sinopsis:            f.sinopsis      || null,
+    duracion_minutos,
+    clasificacion_edad:  f.clasificacion || null,
+    url_poster:          f.poster        || null,
+    url_trailer:         f.trailer       || null,
+    url_banner:          f.banner        || null,
+    categoria_cartelera: f.categoria     || 'Proximamente',
+    estado_registro:     f.estado        || 'Activo',
+    generos: f.generos || [],
+    elenco:              [],
+  }
+}
 
 // ─── Helper components ────────────────────────────────────────────────────────
-
-function EstadoBadge({ estado }) {
+function EstadoBadge({ categoria }) {
   const map = {
-    'Activo':        { bg: '#DCFCE7', text: '#008236' },
-    'En cartelera':  { bg: '#FEF9C3', text: '#B45309' },
-    'Próximamente':  { bg: '#DBEAFE', text: '#1D4ED8' },
-    'Finalizada':    { bg: '#F3F4F6', text: '#6B7280' },
+    'Cartelera':    { bg: '#DCFCE7', text: '#008236' },
+    'Estreno':      { bg: '#FEF9C3', text: '#B45309' },
+    'Preventa':     { bg: '#EDE9FE', text: '#7C3AED' },
+    'Proximamente': { bg: '#DBEAFE', text: '#1D4ED8' },
   }
-  const s = map[estado] || { bg: '#F3F4F6', text: '#6B7280' }
+  const s = map[categoria] || { bg: '#F3F4F6', text: '#6B7280' }
   return (
-    <span style={{
-      background: s.bg, color: s.text,
-      padding: '3px 12px', borderRadius: 999,
-      fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
-    }}>{estado}</span>
+    <span style={{ background: s.bg, color: s.text, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {categoria || '—'}
+    </span>
+  )
+}
+
+function GeneroBadge({ genero }) {
+  return (
+    <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {genero}
+    </span>
   )
 }
 
 function Icon({ d, size = 16 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
     </svg>
   )
 }
 
-const ICON_EDIT = "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-const ICON_EYE  = "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
-const ICON_DEL  = "M3 6h18M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"
-const ICON_PLUS = "M12 5v14M5 12h14"
-const ICON_SEARCH = "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
-const ICON_UPLOAD = "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
-const ICON_X = "M18 6 6 18M6 6l12 12"
-const ICON_CHECK = "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3"
-const ICON_WARN  = "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"
+const ICON_EDIT    = "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+const ICON_EYE     = "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
+const ICON_DEL     = "M3 6h18M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"
+const ICON_PLUS    = "M12 5v14M5 12h14"
+const ICON_SEARCH  = "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+const ICON_X       = "M18 6 6 18M6 6l12 12"
+const ICON_CHECK   = "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3"
+const ICON_WARN    = "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"
+const ICON_REFRESH = "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
 
-// ─── Overlay / Modal wrapper ──────────────────────────────────────────────────
+// ─── FIX 1: Overlay con role="dialog", aria-modal y cierre con Escape ────────
 function Overlay({ children, onClose }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-      zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
         {children}
       </div>
     </div>
   )
 }
 
-// ─── Confirmation overlays ────────────────────────────────────────────────────
 function ConfirmDiscard({ onSi, onNo }) {
   return (
     <Overlay onClose={onNo}>
-      <div style={{
-        background: '#fff', borderRadius: 14, padding: '32px 36px',
-        width: 340, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-      }}>
-        <div style={{ color: '#F59E0B', marginBottom: 12 }}>
-          <Icon d={ICON_WARN} size={40} />
-        </div>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '32px 36px', width: 340, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ color: '#F59E0B', marginBottom: 12 }}><Icon d={ICON_WARN} size={40} /></div>
         <h3 style={{ fontSize: 18, fontWeight: 700, color: '#121212', margin: '0 0 8px' }}>¿Descartar cambios?</h3>
-        <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 24px' }}>Los cambios no guardados se perderán si sales de esta página.</p>
+        <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 24px' }}>Los cambios no guardados se perderán.</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-          <button onClick={onNo} style={{
-            padding: '9px 28px', border: '1px solid #D1D5DC', borderRadius: 8,
-            background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>No</button>
-          <button onClick={onSi} style={{
-            padding: '9px 28px', border: 'none', borderRadius: 8,
-            background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>Sí</button>
+          <button onClick={onNo} style={{ padding: '9px 28px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>No</button>
+          <button onClick={onSi} style={{ padding: '9px 28px', border: 'none', borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Sí</button>
         </div>
       </div>
     </Overlay>
@@ -209,414 +193,515 @@ function ConfirmDiscard({ onSi, onNo }) {
 function SuccessOverlay({ mensaje, onClose }) {
   return (
     <Overlay onClose={onClose}>
-      <div style={{
-        background: '#fff', borderRadius: 14, padding: '40px 48px',
-        width: 380, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-      }}>
-        <div style={{ color: '#22C55E', marginBottom: 16 }}>
-          <Icon d={ICON_CHECK} size={48} />
-        </div>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '40px 48px', width: 380, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ color: '#22C55E', marginBottom: 16 }}><Icon d={ICON_CHECK} size={48} /></div>
         <h3 style={{ fontSize: 20, fontWeight: 800, color: '#121212', margin: '0 0 20px', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{mensaje}</h3>
-        <button onClick={onClose} style={{
-          padding: '10px 32px', border: 'none', borderRadius: 8,
-          background: '#1C2566', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-        }}>Aceptar</button>
+        <button onClick={onClose} style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: '#1C2566', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Aceptar</button>
       </div>
     </Overlay>
   )
 }
 
-function ConfirmEliminar({ titulo, onCancelar, onEliminar }) {
+function ErrorOverlay({ mensaje, onClose }) {
+  return (
+    <Overlay onClose={onClose}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '40px 48px', width: 400, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ color: '#EF4444', marginBottom: 16 }}><Icon d={ICON_WARN} size={48} /></div>
+        <h3 style={{ fontSize: 18, fontWeight: 700, color: '#121212', margin: '0 0 8px' }}>Error</h3>
+        <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 20px', wordBreak: 'break-word' }}>{mensaje}</p>
+        <button onClick={onClose} style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
+      </div>
+    </Overlay>
+  )
+}
+
+function ConfirmEliminar({ titulo, loading, onCancelar, onEliminar }) {
   return (
     <Overlay onClose={onCancelar}>
-      <div style={{
-        background: '#fff', borderRadius: 14, padding: '32px 36px',
-        width: 360, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-      }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '32px 36px', width: 360, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ fontSize: 19, fontWeight: 700, color: '#121212', margin: '0 0 8px' }}>¿Eliminar Película?</h3>
-        <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px' }}>
-          <strong style={{ color: '#374151' }}>{titulo}</strong>
-        </p>
+        <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px' }}><strong>{titulo}</strong></p>
         <p style={{ fontSize: 13, color: '#EF4444', margin: '0 0 24px', fontWeight: 600 }}>Esta acción no se puede deshacer</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-          <button onClick={onCancelar} style={{
-            padding: '9px 28px', border: '1px solid #D1D5DC', borderRadius: 8,
-            background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>Cancelar</button>
-          <button onClick={onEliminar} style={{
-            padding: '9px 28px', border: 'none', borderRadius: 8,
-            background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>Eliminar</button>
+          <button onClick={onCancelar} disabled={loading} style={{ padding: '9px 28px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={onEliminar} disabled={loading} style={{ padding: '9px 28px', border: 'none', borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>{loading ? 'Eliminando...' : 'Eliminar'}</button>
         </div>
       </div>
     </Overlay>
   )
 }
 
-// ─── Upload area ──────────────────────────────────────────────────────────────
-function UploadBox({ label, preview }) {
+function GeneroSelector({ value, onChange, genres }) {
+  const toggle = (id) => {
+    if (value.includes(id)) {
+      onChange(value.filter(x => x !== id))
+    } else {
+      onChange([...value, id])
+    }
+  }
+
   return (
-    <div style={{
-      border: '2px dashed #D1D5DC', borderRadius: 10, padding: '28px 16px',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 8, cursor: 'pointer', background: '#FAFAFA', flex: 1,
-      minHeight: preview ? 'auto' : 110,
-    }}>
-      {preview
-        ? <img src={preview} alt={label} style={{ width: '100%', borderRadius: 8, maxHeight: 140, objectFit: 'cover' }} />
-        : <>
-          <Icon d={ICON_UPLOAD} size={24} />
-          <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>{label}</span>
-        </>
-      }
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {genres.map(g => {
+        const id = g.id_genero
+        const nombre = g.nombre
+        const active = value.includes(id)
+
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => toggle(id)}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: active ? 'none' : '1px solid #D1D5DC',
+              background: active ? '#1C2566' : '#F9FAFB',
+              color: active ? '#fff' : '#374151',
+              transition: 'all 0.15s',
+            }}
+          >
+            {nombre}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-// ─── Movie form (shared by Add/Edit) ─────────────────────────────────────────
-function PeliculaForm({ initial, onGuardar, onCancelar }) {
+function PeliculaForm({
+  initial,
+  onGuardar,
+  onCancelar,
+  saving,
+  genres,
+  categories,
+  classifications
+}) {
   const [form, setForm] = useState(initial || {
-    titulo: '', genero: '', clasificacion: '', duracion: '', fecha: '',
-    director: '', sinopsis: '', elenco: '', trailer: '', estado: '',
-    poster: '', banner: '',
+    titulo: '', generos: [], clasificacion: '', duracion: '',
+    director: '', sinopsis: '', elenco: '', trailer: '',
+    categoria: 'Proximamente', poster: '', banner: '',
   })
   const [showDiscard, setShowDiscard] = useState(false)
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const fieldStyle = {
+  const field = {
     width: '100%', border: '1px solid #D1D5DC', borderRadius: 8,
     padding: '9px 12px', fontSize: 14, color: '#374151', outline: 'none',
     background: '#fff', boxSizing: 'border-box', fontFamily: 'inherit',
   }
-  const labelStyle = { fontSize: 14, fontWeight: 700, color: '#121212', display: 'block', marginBottom: 6 }
+  const label = { fontSize: 13, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }
+  const section = { fontSize: 13, fontWeight: 700, color: '#121212', margin: '0 0 12px', borderBottom: '2px solid #1C2566', paddingBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
 
   return (
     <>
-      <div style={{
-        background: '#fff', borderRadius: 14, padding: '32px 36px',
-        width: 580, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-        maxHeight: '85vh', overflowY: 'auto',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', width: 600, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: '#121212', margin: 0 }}>
-            {initial ? 'Editar Película' : 'Añadir Nueva Película'}
+            {initial ? 'Editar Película' : 'Nueva Película'}
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#121212' }}>Estado</span>
-            <select value={form.estado} onChange={e => set('estado', e.target.value)}
-              style={{ ...fieldStyle, width: 'auto', padding: '7px 28px 7px 10px' }}>
-              <option value="">ESTADO</option>
-              <option>Activo</option>
-              <option>Próximamente</option>
-              <option>En cartelera</option>
-              <option>Finalizada</option>
-            </select>
-          </div>
+          <button onClick={() => setShowDiscard(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: 4 }}>
+            <Icon d={ICON_X} size={20} />
+          </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        <p style={section}>Información General</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#121212', margin: '0 0 12px', borderBottom: '1px solid #E5E7EB', paddingBottom: 8 }}>Información</h3>
+            <label style={label}>Título *</label>
+            <input style={field} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
+          </div>
+          <div>
+            <label style={label}>Clasificación de edad</label>
+            <select style={field} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
+              <option value="">Seleccionar</option>
+              {classifications.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={label}>Duración <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(ej: 2h 30 min ó 150)</span></label>
+            <input style={field} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="2h 30 min" />
+          </div>
+          <div>
+            <label style={label}>Director</label>
+            <input style={field} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
+          </div>
+          <div>
+            <label style={label}>Categoría cartelera</label>
+            <select style={field} value={form.categoria} onChange={e => set('categoria', e.target.value)}>
+              {categories.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <p style={section}>Géneros</p>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ ...label, marginBottom: 10 }}>Selecciona uno o más géneros</label>
+          <GeneroSelector value={form.generos} onChange={v => set('generos', v)} genres={genres} />
+          {form.generos.length === 0 && (
+            <p style={{ fontSize: 12, color: '#9CA3AF', margin: '8px 0 0' }}>Ningún género seleccionado</p>
+          )}
+        </div>
+
+        <p style={section}>Multimedia</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={label}>URL Poster</label>
+            <input style={field} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
+          </div>
+          <div>
+            <label style={label}>URL Tráiler</label>
+            <input style={field} value={form.trailer} onChange={e => set('trailer', e.target.value)} placeholder="https://www.youtube.com/embed/..." />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Título</label>
-            <input style={fieldStyle} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
-          </div>
-          <div>
-            <label style={labelStyle}>Género</label>
-            <select style={fieldStyle} value={form.genero} onChange={e => set('genero', e.target.value)}>
-              <option value="">GÉNERO</option>
-              {['Acción','Aventura','Ciencia Ficción','Comedia','Drama','Animación','Fantasía','Terror','Suspenso','Romance','Documental','Infantil','Musical','Misterio','Histórico','Otros'].map(g => <option key={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Clasificación</label>
-            <select style={fieldStyle} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
-              <option value="">CLASIFICACIÓN</option>
-              {['APT','PG','PG-13','+14','+16','+18'].map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Duración</label>
-            <input style={fieldStyle} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="Ej: 2h 30 min" />
-          </div>
-          <div>
-            <label style={labelStyle}>Director</label>
-            <input style={fieldStyle} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
-          </div>
-          <div>
-            <label style={labelStyle}>Fecha Estreno</label>
-            <input style={fieldStyle} type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} />
+            <label style={label}>URL Banner</label>
+            <input style={field} value={form.banner} onChange={e => set('banner', e.target.value)} placeholder="https://... (imagen horizontal para el banner)" />
           </div>
         </div>
 
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#121212', margin: '0 0 12px', borderBottom: '1px solid #E5E7EB', paddingBottom: 8 }}>Multimedia</h3>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <UploadBox label="Subir Poster" preview={form.poster} />
-            <UploadBox label="Subir Banner" preview={form.banner} />
+        {form.poster && (
+          <div style={{ marginBottom: 16 }}>
+            <img src={form.poster} alt="preview" onError={e => e.target.style.display='none'}
+              style={{ height: 110, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
           </div>
-          <label style={labelStyle}>Tráiler</label>
-          <input style={fieldStyle} value={form.trailer} onChange={e => set('trailer', e.target.value)} placeholder="https://www.youtube URL" />
-        </div>
+        )}
 
-        <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Sinopsis</label>
-          <textarea style={{ ...fieldStyle, minHeight: 90, resize: 'vertical' }}
-            value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)}
-            placeholder="Descripción de la película..." />
+        <p style={section}>Descripción</p>
+        <div style={{ marginBottom: 16 }}>
+          <label style={label}>Sinopsis</label>
+          <textarea style={{ ...field, minHeight: 90, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
         </div>
-
         <div style={{ marginBottom: 28 }}>
-          <label style={labelStyle}>Elenco</label>
-          <textarea style={{ ...fieldStyle, minHeight: 60, resize: 'vertical' }}
-            value={form.elenco} onChange={e => set('elenco', e.target.value)}
-            placeholder="Actor 1, Actor 2, Actor 3..." />
+          <label style={label}>Elenco</label>
+          <textarea style={{ ...field, minHeight: 56, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Actor 1, Actor 2, Actor 3..." />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <button onClick={() => setShowDiscard(true)} style={{
-            padding: '10px 24px', border: '1px solid #D1D5DC', borderRadius: 8,
-            background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>Cancelar</button>
-          <button onClick={() => onGuardar(form)} style={{
-            padding: '10px 24px', border: 'none', borderRadius: 8,
-            background: '#1C2566', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}>Guardar Película</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+          <button onClick={() => setShowDiscard(true)} disabled={saving} style={{ padding: '10px 24px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={() => onGuardar(form)} disabled={saving || !form.titulo} style={{ padding: '10px 28px', border: 'none', borderRadius: 8, background: '#1C2566', color: '#fff', fontSize: 14, fontWeight: 600, cursor: (saving || !form.titulo) ? 'not-allowed' : 'pointer', opacity: (saving || !form.titulo) ? 0.7 : 1 }}>
+            {saving ? 'Guardando...' : 'Guardar Película'}
+          </button>
         </div>
       </div>
-
-      {showDiscard && (
-        <ConfirmDiscard
-          onSi={onCancelar}
-          onNo={() => setShowDiscard(false)}
-        />
-      )}
+      {showDiscard && <ConfirmDiscard onSi={onCancelar} onNo={() => setShowDiscard(false)} />}
     </>
   )
 }
 
-// ─── View movie modal ─────────────────────────────────────────────────────────
 function VerPelicula({ movie, onClose }) {
+  if (!movie) return null
+
+  const embedTrailer = (url) => {
+    if (!url) return null
+    if (url.includes('/embed/')) return url
+    const match = url.match(/(?:youtu\.be\/|v=)([^&?/]+)/)
+    return match ? `https://www.youtube.com/embed/${match[1]}` : url
+  }
+
   return (
     <Overlay onClose={onClose}>
-      <div style={{
-        background: '#fff', borderRadius: 14, width: 620,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden', position: 'relative',
-      }}>
-        {/* Banner */}
-        <div style={{ position: 'relative', height: 200, background: '#1C2566', overflow: 'hidden' }}>
-          {movie.banner && movie.banner.includes('tmdb') && !movie.banner.includes('example') && (
+      <div style={{ background: '#fff', borderRadius: 16, width: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', height: 210, background: 'linear-gradient(135deg, #1C2566 0%, #0f1642 100%)', overflow: 'hidden' }}>
+          {movie.banner && (
             <img src={movie.banner} alt="" onError={e => e.target.style.display='none'}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }} />
           )}
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)',
-          }} />
-          <button onClick={onClose} style={{
-            position: 'absolute', top: 12, right: 12,
-            background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%',
-            width: 32, height: 32, cursor: 'pointer', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%)' }} />
+          <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon d={ICON_X} size={16} />
           </button>
-
-          {/* Poster + title */}
-          <div style={{ position: 'absolute', bottom: 16, left: 20, display: 'flex', gap: 16, alignItems: 'flex-end' }}>
-            <div style={{
-              width: 90, height: 130, borderRadius: 8, border: '2px solid rgba(255,255,255,0.3)',
-              background: '#364153', overflow: 'hidden', flexShrink: 0,
-            }}>
-              {movie.poster && movie.poster.includes('tmdb') && !movie.poster.includes('example') && (
-                <img src={movie.poster} alt={movie.titulo}
-                  onError={e => e.target.style.display='none'}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              )}
+          <div style={{ position: 'absolute', bottom: 18, left: 22, display: 'flex', gap: 18, alignItems: 'flex-end' }}>
+            <div style={{ width: 88, height: 126, borderRadius: 10, border: '2px solid rgba(255,255,255,0.25)', background: '#364153', overflow: 'hidden', flexShrink: 0 }}>
+              {movie.poster
+                ? <img src={movie.poster} alt={movie.titulo} onError={e => e.target.style.display='none'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 10 }}>Sin imagen</div>
+              }
             </div>
-            <div>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 8px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
-                {movie.titulo}
-              </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 16px', fontSize: 12 }}>
-                <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Género:</b> {movie.genero}</span>
-                <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Duración:</b> {movie.duracion}</span>
-                <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Clasificación:</b> {movie.clasificacion}</span>
-                <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Director:</b> {movie.director}</span>
+            <div style={{ paddingBottom: 4 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 8px', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>{movie.titulo}</h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                {(movie.generos || []).map(g => (
+                  <span key={g} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600 }}>{g}</span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
+                {movie.clasificacion && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Edad:</b> {movie.clasificacion}</span>}
+                {movie.duracion      && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Duración:</b> {movie.duracion}</span>}
+                {movie.director      && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Dir:</b> {movie.director}</span>}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '20px 24px' }}>
-          <div style={{ marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#121212', margin: '0 0 6px' }}>Sinopsis:</h3>
-            <p style={{ fontSize: 13, color: '#4B5563', margin: 0, lineHeight: 1.6 }}>{movie.sinopsis}</p>
+        <div style={{ padding: '22px 26px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <EstadoBadge categoria={movie.categoria} />
+            {movie.clasificacion && (
+              <span style={{ background: '#FEF3C7', color: '#92400E', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600 }}>{movie.clasificacion}</span>
+            )}
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#121212', margin: '0 0 6px' }}>Reparto:</h3>
-            <p style={{ fontSize: 13, color: '#4B5563', margin: 0, lineHeight: 1.6 }}>{movie.elenco}</p>
-          </div>
-          {movie.trailer && (
-            <div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#121212', margin: '0 0 10px' }}>Tráiler:</h3>
-              <div style={{
-                background: '#1C2566', borderRadius: 10, padding: '24px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                cursor: 'pointer',
-              }} onClick={() => window.open(movie.trailer, '_blank')}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff" opacity="0.9">
-                  <path d="M5 3l14 9-14 9V3z"/>
-                </svg>
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>VER TRÁILER OFICIAL</div>
-                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{movie.trailer}</div>
-                </div>
-              </div>
+
+          {movie.sinopsis && (
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#121212', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sinopsis</h3>
+              <p style={{ fontSize: 13, color: '#4B5563', margin: 0, lineHeight: 1.7 }}>{movie.sinopsis}</p>
             </div>
           )}
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, color: '#6B7280' }}>Estado:</span>
-            <EstadoBadge estado={movie.estado} />
-          </div>
+
+          {movie.elenco && (
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#121212', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reparto</h3>
+              <p style={{ fontSize: 13, color: '#4B5563', margin: 0, lineHeight: 1.7 }}>{movie.elenco}</p>
+            </div>
+          )}
+
+          {movie.trailer && (
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#121212', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tráiler</h3>
+              {embedTrailer(movie.trailer)?.includes('embed') ? (
+                <iframe width="100%" height="230" src={embedTrailer(movie.trailer)} title="Trailer"
+                  frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen style={{ borderRadius: 10 }} />
+              ) : (
+                // ─── FIX 2: <div> clickeable → <a> semántico ─────────────────
+                <a
+                  href={movie.trailer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: '#1C2566', borderRadius: 10, padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer', textDecoration: 'none' }}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M5 3l14 9-14 9V3z"/></svg>
+                  <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>VER TRÁILER OFICIAL</span>
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Overlay>
   )
 }
 
-// ─── Movie card ───────────────────────────────────────────────────────────────
+// ─── FIX 3: MovieCard hover manejado en CatalogoPeliculas.css ────────────────
 function MovieCard({ movie, onEdit, onVer, onEliminar }) {
-  const hasPoster = movie.poster && movie.poster.includes('tmdb') && !movie.poster.includes('example')
-
   return (
-    <div style={{
-      background: '#fff', borderRadius: 12, overflow: 'hidden',
-      border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    }}>
+    <div className="movie-card">
       {/* Poster */}
-      <div style={{ height: 180, background: '#1C2566', position: 'relative', overflow: 'hidden' }}>
-        {hasPoster
-          ? <img src={movie.poster} alt={movie.titulo}
-              onError={e => { e.target.style.display='none' }}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{ height: 190, background: '#1C2566', position: 'relative', overflow: 'hidden' }}>
+        {movie.poster
+          ? <img src={movie.poster} alt={movie.titulo} onError={e => e.target.style.display='none'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 4h16M8 4v4m8-4v4"/>
               </svg>
             </div>
         }
+        <div style={{ position: 'absolute', top: 8, left: 8 }}>
+          <EstadoBadge categoria={movie.categoria} />
+        </div>
       </div>
 
       {/* Info */}
-      <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#121212', textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.3 }}>
-          {movie.titulo}
+      <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#121212', textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.3 }}>{movie.titulo}</div>
+
+        {(movie.generos || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {movie.generos.slice(0, 2).map(g => <GeneroBadge key={g} genero={g} />)}
+            {movie.generos.length > 2 && <span style={{ fontSize: 10, color: '#9CA3AF', alignSelf: 'center' }}>+{movie.generos.length - 2}</span>}
+          </div>
+        )}
+
+        {movie.director && (
+          <div style={{ fontSize: 11.5, color: '#6B7280' }}>
+            <span style={{ fontWeight: 600 }}>Dir. </span>{movie.director}
+          </div>
+        )}
+
+        <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>
+          {[movie.clasificacion, movie.duracion].filter(Boolean).join(' · ')}
         </div>
-        <div style={{ fontSize: 11.5, color: '#6B7280' }}>
-          {movie.genero} , {movie.duracion}
-        </div>
-        <div style={{ fontSize: 11.5, color: '#6B7280', marginBottom: 6 }}>
-          {movie.clasificacion}
-        </div>
-        <EstadoBadge estado={movie.estado} />
       </div>
 
       {/* Actions */}
-      <div style={{
-        padding: '10px 14px', borderTop: '1px solid #F3F4F6',
-        display: 'flex', gap: 8,
-      }}>
-        {[
-          { icon: ICON_EDIT, onClick: onEdit, title: 'Editar', color: '#6B7280', hoverBg: '#F3F4F6' },
-          { icon: ICON_EYE,  onClick: onVer,  title: 'Ver',    color: '#6B7280', hoverBg: '#F3F4F6' },
-          { icon: ICON_DEL,  onClick: onEliminar, title: 'Eliminar', color: '#EF4444', hoverBg: '#FEF2F2' },
-        ].map((btn, i) => (
-          <button key={i} onClick={btn.onClick} title={btn.title}
-            onMouseEnter={e => { e.currentTarget.style.background = btn.hoverBg; e.currentTarget.style.color = btn.color }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9CA3AF' }}
-            style={{
-              background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8,
-              padding: '6px 10px', cursor: 'pointer', color: '#9CA3AF',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.15s ease',
-            }}>
-            <Icon d={btn.icon} size={15} />
-          </button>
-        ))}
+      <div style={{ padding: '10px 14px', borderTop: '1px solid #F3F4F6', display: 'flex', gap: 8 }}>
+        <button className="movie-card-btn" onClick={onEdit}     title="Editar"><Icon d={ICON_EDIT} size={15} /></button>
+        <button className="movie-card-btn" onClick={onVer}      title="Ver"><Icon d={ICON_EYE}  size={15} /></button>
+        <button className="movie-card-btn btn-del" onClick={onEliminar} title="Eliminar"><Icon d={ICON_DEL}  size={15} /></button>
       </div>
     </div>
   )
 }
 
-// ─── Pagination ───────────────────────────────────────────────────────────────
 function Pagination({ total, page, perPage, onPage }) {
   const pages = Math.ceil(total / perPage)
   const start = (page - 1) * perPage + 1
   const end   = Math.min(page * perPage, total)
-
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      marginTop: 24, padding: '0 2px',
-    }}>
-      <span style={{ fontSize: 13, color: '#6B7280' }}>
-        Mostrando <b>{start}</b> a <b>{end}</b> de <b>{total}</b> registros
-      </span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 28, padding: '0 2px' }}>
+      <span style={{ fontSize: 13, color: '#6B7280' }}>Mostrando <b>{start}</b>–<b>{end}</b> de <b>{total}</b></span>
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => onPage(page - 1)} disabled={page === 1}
-          style={{
-            padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: page === 1 ? 'default' : 'pointer',
-            border: '1px solid #D1D5DC', background: '#fff',
-            color: page === 1 ? '#D1D5DC' : '#374151',
-          }}>Anterior</button>
-        {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
-          <button key={p} onClick={() => onPage(p)}
-            style={{
-              padding: '6px 12px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
-              background: p === page ? '#1C2566' : '#fff',
-              color: p === page ? '#fff' : '#374151',
-              border: p === page ? 'none' : '1px solid #D1D5DC',
-            }}>{p}</button>
+        <button onClick={() => onPage(page - 1)} disabled={page === 1} style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: page === 1 ? 'default' : 'pointer', border: '1px solid #D1D5DC', background: '#fff', color: page === 1 ? '#D1D5DC' : '#374151' }}>Anterior</button>
+        {Array.from({ length: Math.min(pages, 7) }, (_, i) => i + 1).map(p => (
+          <button key={p} onClick={() => onPage(p)} style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, cursor: 'pointer', background: p === page ? '#1C2566' : '#fff', color: p === page ? '#fff' : '#374151', border: p === page ? 'none' : '1px solid #D1D5DC' }}>{p}</button>
         ))}
-        <button onClick={() => onPage(page + 1)} disabled={page === pages}
-          style={{
-            padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: page === pages ? 'default' : 'pointer',
-            border: '1px solid #D1D5DC', background: '#fff',
-            color: page === pages ? '#D1D5DC' : '#374151',
-          }}>Siguiente</button>
+        <button onClick={() => onPage(page + 1)} disabled={page === pages} style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: page === pages ? 'default' : 'pointer', border: '1px solid #D1D5DC', background: '#fff', color: page === pages ? '#D1D5DC' : '#374151' }}>Siguiente</button>
       </div>
     </div>
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function CatalogoPeliculas() {
-  const [movies, setMovies]           = useState(SAMPLE_MOVIES)
-  const [buscar, setBuscar]           = useState('')
-  const [filtroGenero, setFiltroGenero]     = useState('')
-  const [filtroEstado, setFiltroEstado]     = useState('')
-  const [filtroClasif, setFiltroClasif]     = useState('')
-  const [page, setPage]               = useState(1)
+  const [movies, setMovies]             = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [buscar, setBuscar]             = useState('')
+  const [genres, setGenres]             = useState([])
+  const [categories, setCategories]     = useState([])
+  const [classifications, setClassifications] = useState([])
+  const [filtroGenero, setFiltroGenero] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [filtroClasif, setFiltroClasif] = useState('')
+  const [page, setPage]                 = useState(1)
   const PER_PAGE = 12
 
-  // Modals
-  const [modalAdd, setModalAdd]       = useState(false)
-  const [modalEdit, setModalEdit]     = useState(null)   // movie object
-  const [modalVer, setModalVer]       = useState(null)   // movie object
-  const [modalDel, setModalDel]       = useState(null)   // movie object
-  const [successMsg, setSuccessMsg]   = useState('')
+  const [modalAdd, setModalAdd]     = useState(false)
+  const [modalEdit, setModalEdit]   = useState(null)
+  const [modalVer, setModalVer]     = useState(null)
+  const [modalDel, setModalDel]     = useState(null)
+  const [successMsg, setSuccessMsg] = useState('')
+  const [errorMsg, setErrorMsg]     = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [deleting, setDeleting]     = useState(false)
 
-  // ── Filtering ──
+  const fetchMovies = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.list()
+      setMovies((Array.isArray(data) ? data : []).map(backendToFrontend))
+    } catch (e) {
+      setErrorMsg(`Error al cargar películas: ${e.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadMeta = useCallback(async () => {
+    try {
+      const [genresData, categoriesData, classificationsData] = await Promise.all([
+        api.genres(),
+        api.categories(),
+        api.classifications()
+      ])
+      setGenres(genresData || [])
+      setCategories((categoriesData || []).map(c => typeof c === 'string' ? c : c.nombre))
+      setClassifications((classificationsData || []).map(c => typeof c === 'string' ? c : c.nombre))
+    } catch (e) {
+      setErrorMsg(`Error cargando filtros: ${e.message}`)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchMovies()
+    loadMeta()
+  }, [fetchMovies, loadMeta])
+
+  const handleCreate = async (formData) => {
+    setSaving(true)
+    try {
+      const created = await api.create(frontendToBackend(formData))
+      setMovies(prev => [...prev, {
+        ...backendToFrontend(created),
+        generos: formData.generos
+                    .map(id => {
+                      const g = genres.find(g => g.id_genero === id)
+                      return g ? g.nombre : null
+                    })
+                    .filter(Boolean),
+        categoria: formData.categoria,
+        director:  formData.director,
+        elenco:    formData.elenco,
+      }])
+      setModalAdd(false)
+      setSuccessMsg('PELÍCULA AÑADIDA CORRECTAMENTE')
+    } catch (e) {
+      setErrorMsg(`Error al crear película: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async (formData) => {
+    setSaving(true)
+    try {
+      const updated = await api.update(modalEdit.id, frontendToBackend(formData))
+      setMovies(prev => prev.map(m => m.id === modalEdit.id
+        ? {
+            ...backendToFrontend(updated),
+            id:        modalEdit.id,
+            generos:  formData.generos
+                        .map(id => {
+                          const g = genres.find(g => g.id_genero === id)
+                          return g ? g.nombre : null
+                        })
+                        .filter(Boolean),
+            categoria: formData.categoria,
+            director:  formData.director,
+            elenco:    formData.elenco,
+            duracion:  formData.duracion,
+          }
+        : m
+      ))
+      setModalEdit(null)
+      setSuccessMsg('PELÍCULA EDITADA CORRECTAMENTE')
+    } catch (e) {
+      setErrorMsg(`Error al actualizar película: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(modalDel.id)
+      setMovies(prev => prev.filter(m => m.id !== modalDel.id))
+      setModalDel(null)
+    } catch (e) {
+      setErrorMsg(`Error al eliminar película: ${e.message}`)
+      setModalDel(null)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleVer = async (movie) => {
+    try {
+      const details = await api.details(movie.id)
+      const parsed = backendToFrontend(details)
+      setModalVer({
+        ...parsed,
+        generos:  (details.generos  || []).map(g => g.nombre ?? g),
+        actores:  details.actores   || [],
+        elenco: movie.elenco,
+        poster: parsed.poster || movie.poster,
+        trailer: parsed.trailer || movie.trailer,
+        banner: parsed.banner || movie.banner,
+      })
+    } catch {
+      setModalVer(movie)
+    }
+  }
+
   const filtered = movies.filter(m => {
     const q = buscar.toLowerCase()
-    if (q && !m.titulo.toLowerCase().includes(q) && !m.genero.toLowerCase().includes(q)) return false
-    if (filtroGenero && !m.genero.toLowerCase().includes(filtroGenero.toLowerCase())) return false
-    if (filtroEstado && m.estado !== filtroEstado) return false
+    if (q && !(m.titulo || '').toLowerCase().includes(q)) return false
+    if (filtroGenero && !(m.generos || []).includes(filtroGenero)) return false
+    if (filtroCategoria && m.categoria !== filtroCategoria) return false
     if (filtroClasif && m.clasificacion !== filtroClasif) return false
     return true
   })
@@ -632,152 +717,144 @@ export default function CatalogoPeliculas() {
   return (
     <div style={{ padding: '28px 28px 40px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#121212', margin: 0 }}>Catálogo de Películas</h1>
-          <p style={{ fontSize: 14, color: '#6B7280', margin: '5px 0 0' }}>Administra todas las Películas disponibles en la plataforma</p>
+          <p style={{ fontSize: 14, color: '#6B7280', margin: '5px 0 0' }}>
+            {loading ? 'Cargando...' : `${filtered.length} película${filtered.length !== 1 ? 's' : ''} encontrada${filtered.length !== 1 ? 's' : ''}`}
+          </p>
         </div>
-        <button onClick={() => setModalAdd(true)}
-          onMouseEnter={e => e.currentTarget.style.background = '#1a3a8a'}
-          onMouseLeave={e => e.currentTarget.style.background = '#1C2566'}
-          style={{
-            background: '#1C2566', color: '#fff', border: 'none', borderRadius: 10,
-            padding: '11px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
-            boxShadow: '0 2px 8px rgba(28,37,102,0.3)', transition: 'background 0.15s',
-          }}>
-          <Icon d={ICON_PLUS} size={16} />
-          Nueva Película
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={fetchMovies} title="Recargar" style={{ background: '#F9FAFB', color: '#374151', border: '1px solid #D1D5DC', borderRadius: 10, padding: '11px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Icon d={ICON_REFRESH} size={16} />
+          </button>
+          <button onClick={() => setModalAdd(true)}
+            onMouseEnter={e => e.currentTarget.style.background = '#1a3a8a'}
+            onMouseLeave={e => e.currentTarget.style.background = '#1C2566'}
+            style={{ background: '#1C2566', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 8px rgba(28,37,102,0.3)', transition: 'background 0.15s' }}>
+            <Icon d={ICON_PLUS} size={16} />
+            Nueva Película
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 22, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Search */}
-        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 200 }}>
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }}>
-            <Icon d={ICON_SEARCH} size={16} />
-          </span>
-          <input
-            type="text" placeholder="Buscar Películas"
-            value={buscar} onChange={e => { setBuscar(e.target.value); setPage(1) }}
-            style={{
-              width: '100%', border: '1px solid #D1D5DC', borderRadius: 10,
-              padding: '10px 14px 10px 38px', fontSize: 14, color: '#374151',
-              outline: 'none', background: '#fff', boxSizing: 'border-box',
-            }}
-          />
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }}><Icon d={ICON_SEARCH} size={16} /></span>
+          <input type="text" placeholder="Buscar por título..." value={buscar} onChange={e => { setBuscar(e.target.value); setPage(1) }}
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 10, padding: '10px 14px 10px 38px', fontSize: 14, color: '#374151', outline: 'none', background: '#fff', boxSizing: 'border-box' }} />
         </div>
-
-        {/* Género */}
         <div style={{ position: 'relative' }}>
           <select value={filtroGenero} onChange={e => { setFiltroGenero(e.target.value); setPage(1) }} style={dropStyle}>
             <option value="">GÉNERO</option>
-            {['Acción','Aventura','Ciencia Ficción','Comedia','Drama','Animación','Fantasía','Terror','Suspenso','Romance','Documental','Infantil','Musical','Misterio','Histórico','Otros'].map(g => <option key={g}>{g}</option>)}
+            {genres.map(g => {
+              const nombre = typeof g === 'string' ? g : g.nombre
+              return <option key={nombre} value={nombre}>{nombre}</option>
+            })}
           </select>
-          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 12 }}>▼</span>
+          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 11 }}>▼</span>
         </div>
-
-        {/* Estado */}
         <div style={{ position: 'relative' }}>
-          <select value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setPage(1) }} style={dropStyle}>
-            <option value="">ESTADO</option>
-            <option>Activo</option>
-            <option>Próximamente</option>
-            <option>En cartelera</option>
-            <option>Finalizada</option>
+          <select value={filtroCategoria} onChange={e => { setFiltroCategoria(e.target.value); setPage(1) }} style={dropStyle}>
+            <option value="">CARTELERA</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 12 }}>▼</span>
+          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 11 }}>▼</span>
         </div>
-
-        {/* Clasificación */}
         <div style={{ position: 'relative' }}>
           <select value={filtroClasif} onChange={e => { setFiltroClasif(e.target.value); setPage(1) }} style={dropStyle}>
             <option value="">CLASIFICACIÓN</option>
-            {['APT','PG','PG-13','+14','+16','+18'].map(c => <option key={c}>{c}</option>)}
+            {classifications.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 12 }}>▼</span>
+          <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280', fontSize: 11 }}>▼</span>
         </div>
+        {(filtroGenero || filtroCategoria || filtroClasif || buscar) && (
+          <button onClick={() => { setBuscar(''); setFiltroGenero(''); setFiltroCategoria(''); setFiltroClasif(''); setPage(1) }}
+            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #FECACA', background: '#FEF2F2', color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Limpiar
+          </button>
+        )}
       </div>
 
       {/* Grid */}
-      {paginated.length === 0
-        ? <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF', fontSize: 15 }}>
-            No se encontraron películas con los filtros seleccionados.
-          </div>
-        : <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 18,
-          }}>
+      {loading
+        ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>Cargando películas...</div>
+        : paginated.length === 0
+        ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>No se encontraron películas.</div>
+        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 18 }}>
             {paginated.map(m => (
               <MovieCard
-                key={m.id} movie={m}
-                onEdit={() => setModalEdit(m)}
-                onVer={() => setModalVer(m)}
+                key={m.id}
+                movie={m}
+                onEdit={async () => {
+                  try {
+                    const details = await api.details(m.id)
+                    const generoIds = (details.generos || []).map(g => {
+                      const nombre = g.nombre ?? g
+                      const found = genres.find(gen => gen.nombre === nombre)
+                      return found ? found.id_genero : null
+                    }).filter(Boolean)
+                    setModalEdit({
+                      ...backendToFrontend({
+                        ...m,
+                        ...details,
+                      }),
+                      id: m.id,
+                      generos: generoIds,
+                      director: m.director,
+                      elenco: m.elenco,
+                    })
+                  } catch (e) {
+                    setErrorMsg('Error cargando detalles de película')
+                  }
+                }}
+                onVer={() => handleVer(m)}
                 onEliminar={() => setModalDel(m)}
               />
             ))}
           </div>
       }
 
-      {/* Pagination */}
-      {filtered.length > 0 && (
+      {!loading && filtered.length > PER_PAGE && (
         <Pagination total={filtered.length} page={page} perPage={PER_PAGE} onPage={setPage} />
       )}
 
-      {/* ── Modals ── */}
-
-      {/* Add */}
       {modalAdd && (
         <Overlay onClose={() => {}}>
           <PeliculaForm
-            onGuardar={data => {
-              setMovies(prev => [...prev, { ...data, id: Date.now() }])
-              setModalAdd(false)
-              setSuccessMsg('PELÍCULA AÑADIDA CORRECTAMENTE')
-            }}
+            saving={saving}
+            onGuardar={handleCreate}
             onCancelar={() => setModalAdd(false)}
+            genres={genres}
+            categories={categories}
+            classifications={classifications}
           />
         </Overlay>
       )}
 
-      {/* Edit */}
       {modalEdit && (
         <Overlay onClose={() => {}}>
           <PeliculaForm
             initial={modalEdit}
-            onGuardar={data => {
-              setMovies(prev => prev.map(m => m.id === modalEdit.id ? { ...m, ...data } : m))
-              setModalEdit(null)
-              setSuccessMsg('PELÍCULA EDITADA CORRECTAMENTE')
-            }}
+            saving={saving}
+            onGuardar={handleUpdate}
             onCancelar={() => setModalEdit(null)}
+            genres={genres}
+            categories={categories}
+            classifications={classifications}
           />
         </Overlay>
       )}
 
-      {/* Ver */}
-      {modalVer && (
-        <VerPelicula movie={modalVer} onClose={() => setModalVer(null)} />
-      )}
+      {modalVer && <VerPelicula movie={modalVer} onClose={() => setModalVer(null)} />}
 
-      {/* Eliminar */}
       {modalDel && (
-        <ConfirmEliminar
-          titulo={modalDel.titulo}
-          onCancelar={() => setModalDel(null)}
-          onEliminar={() => {
-            setMovies(prev => prev.filter(m => m.id !== modalDel.id))
-            setModalDel(null)
-          }}
-        />
+        <ConfirmEliminar titulo={modalDel.titulo} loading={deleting} onCancelar={() => setModalDel(null)} onEliminar={handleDelete} />
       )}
 
-      {/* Success */}
-      {successMsg && (
-        <SuccessOverlay mensaje={successMsg} onClose={() => setSuccessMsg('')} />
-      )}
+      {successMsg && <SuccessOverlay mensaje={successMsg} onClose={() => setSuccessMsg('')} />}
+      {errorMsg   && <ErrorOverlay  mensaje={errorMsg}   onClose={() => setErrorMsg('')} />}
     </div>
   )
 }
