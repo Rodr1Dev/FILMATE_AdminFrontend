@@ -95,7 +95,7 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
       if (modo === 'crear') {
         await apiFetch(`${ROOMS_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
       } else {
-        await apiFetch(`${ROOMS_BASE}/${salaInicial.id_sala}/`, { method: 'PUT', body: JSON.stringify(body) })
+        await apiFetch(`${ROOMS_BASE}/${salaInicial.id_sala}`, { method: 'PUT', body: JSON.stringify(body) })
       }
       onGuardado()
     } catch (e) { setError(e.message) }
@@ -267,7 +267,7 @@ export default function CinesYSalas() {
   const handleEliminarSala = async () => {
     setLoadingElim(true)
     try {
-      await apiFetch(`${ROOMS_BASE}/${confirmarElim.item.id_sala}/`, { method: 'DELETE' })
+      await apiFetch(`${ROOMS_BASE}/${confirmarElim.item.id_sala}`, { method: 'DELETE' })
       if (salaSeleccionada?.id_sala === confirmarElim.item.id_sala) setSalaSeleccionada(null)
       await cargarSalas()
       setConfirmarElim(null)
