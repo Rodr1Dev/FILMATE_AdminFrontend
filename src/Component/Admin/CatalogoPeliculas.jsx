@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import './CatalogoPeliculas.css'
 
 // ─── API Configuration ────────────────────────────────────────────────────────
@@ -19,6 +19,8 @@ const api = {
   genres:          () => fetch(`${API_BASE}/movies/meta/genres`).then(r => r.json()),
   categories:      () => fetch(`${API_BASE}/movies/meta/categories`).then(r => r.json()),
   classifications: () => fetch(`${API_BASE}/movies/meta/classifications`).then(r => r.json()),
+  directors:       () => fetch(`${API_BASE}/movies/meta/directors`).then(r => r.json()),
+  actors:          () => fetch(`${API_BASE}/actors/`).then(r => r.json()),
 }
 
 // ─── Helpers para extraer strings de objetos ─────────────────────────────────
@@ -54,9 +56,31 @@ function backendToFrontend(m) {
   if (m.duracion_minutos) {
     const h   = Math.floor(m.duracion_minutos / 60)
     const min = m.duracion_minutos % 60
-    duracion  = h > 0 ? `${h}h${min > 0 ? ` ${min} min` : ''}` : `${min} min`
+    duracion  = h > 0 ? `${h}h ${min > 0 ? `${min} min` : ''}` : `${min} min`
   } else if (m.duracion) {
     duracion = m.duracion
+  }
+
+  let director = ''
+  let directorId = null
+  if (Array.isArray(m.directores) && m.directores.length > 0) {
+    const d = m.directores[0]
+    director = d.nombre ?? d
+    directorId = d.id_director ?? null
+  } else if (m.director) {
+    director = m.director
+  }
+
+  let elencoStr = ''
+  if (Array.isArray(m.actores)) {
+    elencoStr = m.actores.map(a => {
+      const personaje = a.personaje ? ` (${a.personaje})` : ''
+      return `${a.nombre}${personaje}`
+    }).join(', ')
+  } else if (Array.isArray(m.elenco)) {
+    elencoStr = m.elenco.map(a => a.nombre ?? a).join(', ')
+  } else if (m.elenco) {
+    elencoStr = m.elenco
   }
 
   return {
@@ -72,24 +96,33 @@ function backendToFrontend(m) {
     generos:          extractGenres(m.generos) || extractGenres(m.genero),
     categoria:        extractString(m.categoria_cartelera) || extractString(m.categoria) || 'Proximamente',
     estado:           m.estado_registro      ?? m.estado ?? 'Activo',
-    director:         m.director             ?? '',
-    elenco:           Array.isArray(m.elenco)
-                        ? m.elenco.map(a => a.nombre ?? a).join(', ')
-                        : (m.elenco ?? ''),
+    director,
+    directorId,
+    elenco: elencoStr,
   }
 }
 
-function frontendToBackend(f) {
+function frontendToBackend(f, mode = 'create') {
   let duracion_minutos = null
   if (f.duracion && f.duracion.trim() !== '') {
-    const hMatch = f.duracion.match(/(\d+)\s*h/i)
-    const mMatch = f.duracion.match(/(\d+)\s*min/i)
-    const parsed = (hMatch ? parseInt(hMatch[1]) * 60 : 0) + (mMatch ? parseInt(mMatch[1]) : 0)
-    if (parsed > 0) {
-      duracion_minutos = parsed
+    const solo = parseInt(f.duracion)
+    if (!isNaN(solo) && solo > 0) {
+      duracion_minutos = solo
+    }
+  }
+
+  let elencoPayload = []
+  if (Array.isArray(f.elenco)) {
+    if (mode === 'create') {
+      elencoPayload = f.elenco.map(e => ({
+        id_actor: e.actorId,
+        personaje: e.personaje || ''
+      })).filter(e => e.id_actor)
     } else {
-      const solo = parseInt(f.duracion)
-      if (!isNaN(solo) && solo > 0) duracion_minutos = solo
+      elencoPayload = f.elenco.map(e => ({
+        nombre: e.nombre,
+        personaje: e.personaje || ''
+      })).filter(e => e.nombre)
     }
   }
 
@@ -103,8 +136,9 @@ function frontendToBackend(f) {
     url_banner:          f.banner        || null,
     categoria_cartelera: f.categoria     || 'Proximamente',
     estado_registro:     f.estado        || 'Activo',
-    generos: f.generos || [],
-    // elenco omitido: el backend requiere id_actor existente; se muestra en UI pero no se envía
+    generos:             f.generos       || [],
+    directores:          f.directorId   ? [f.directorId] : [],
+    elenco: elencoPayload,
   }
 }
 
@@ -114,13 +148,25 @@ function validarForm(form) {
   if (!form.titulo?.trim())         errores.titulo         = 'El título es obligatorio'
   if (!form.sinopsis?.trim())       errores.sinopsis       = 'La sinopsis es obligatoria'
   if (!form.duracion?.trim())       errores.duracion       = 'La duración es obligatoria'
+  else {
+    const solo = parseInt(form.duracion)
+    if (isNaN(solo) || solo <= 0)   errores.duracion       = 'Duración inválida (solo números, ej: 120)'
+  }
   if (!form.clasificacion)          errores.clasificacion  = 'La clasificación de edad es obligatoria'
   if (!form.categoria)              errores.categoria      = 'La categoría es obligatoria'
   if (!form.generos?.length)        errores.generos        = 'Selecciona al menos un género'
   if (!form.poster?.trim())         errores.poster         = 'El URL del poster es obligatorio'
+  else if (!form.poster.match(/^https?:\/\/.+/)) errores.poster = 'URL inválida (debe empezar con http:// o https://)'
   if (!form.trailer?.trim())        errores.trailer        = 'El URL del tráiler es obligatorio'
-  if (!form.director?.trim())       errores.director       = 'El director es obligatorio'
-  // elenco es opcional (no se envía al backend)
+  if (!form.directorId)             errores.director       = 'Selecciona un director'
+  if (!Array.isArray(form.elenco) || form.elenco.length === 0) {
+    errores.elenco = 'Agrega al menos un actor al reparto'
+  } else {
+    const invalidActor = form.elenco.some(e => !e.nombre?.trim())
+    if (invalidActor) errores.elenco = 'Completa todos los actores'
+    const invalidChar = form.elenco.some(e => !e.personaje?.trim())
+    if (invalidChar) errores.elenco = 'Completa todos los personajes'
+  }
   return errores
 }
 
@@ -183,7 +229,7 @@ function Overlay({ children, onClose }) {
         role="dialog"
         aria-modal="true"
         onClick={e => e.stopPropagation()}
-        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}
       >
         {children}
       </div>
@@ -301,6 +347,7 @@ function FieldError({ msg }) {
   return <p style={{ fontSize: 11, color: '#EF4444', margin: '4px 0 0', fontWeight: 500 }}>{msg}</p>
 }
 
+// ─── PeliculaForm ─────────────────────────────────────────────────────────────
 function PeliculaForm({
   initial,
   onGuardar,
@@ -308,15 +355,42 @@ function PeliculaForm({
   saving,
   genres,
   categories,
-  classifications
+  classifications,
+  directors,
+  actorsList,
 }) {
-  const [form, setForm] = useState(initial || {
-    titulo: '', generos: [], clasificacion: '', duracion: '',
-    director: '', sinopsis: '', elenco: '', trailer: '',
-    categoria: 'Proximamente', poster: '', banner: '',
-  })
-  const [errores, setErrores] = useState({})
+  const initForm = () => {
+    if (initial) {
+      return {
+        titulo:         initial.titulo         || '',
+        sinopsis:       initial.sinopsis       || '',
+        duracion:       initial.duracion_minutos ? String(initial.duracion_minutos) : (initial.duracion || ''),
+        clasificacion:  initial.clasificacion  || '',
+        categoria:      initial.categoria       || 'Proximamente',
+        poster:         initial.poster         || '',
+        trailer:        initial.trailer        || '',
+        banner:         initial.banner         || '',
+        generos:        initial.generos        || [],
+        directorId:     initial.directorId     || null,
+        estado:         initial.estado         || 'Activo',
+        elenco:         initial._elencoForm    || [],
+      }
+    }
+    return {
+      titulo: '', generos: [], clasificacion: '', duracion: '',
+      directorId: null, sinopsis: '', elenco: [], trailer: '',
+      categoria: 'Proximamente', poster: '', banner: '', estado: 'Activo',
+    }
+  }
+
+  const [form, setForm]           = useState(initForm)
+  const [errores, setErrores]     = useState({})
   const [showDiscard, setShowDiscard] = useState(false)
+
+  useEffect(() => {
+    if (initial) setForm(initForm())
+  }, [initial])
+
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }))
     if (errores[k]) setErrores(prev => ({ ...prev, [k]: undefined }))
@@ -326,8 +400,8 @@ function PeliculaForm({
     width: '100%',
     border: `1px solid ${errores[key] ? '#FCA5A5' : '#D1D5DC'}`,
     borderRadius: 8,
-    padding: '9px 12px',
-    fontSize: 14,
+    padding: '7px 10px',
+    fontSize: 13,
     color: '#374151',
     outline: 'none',
     background: errores[key] ? '#FEF2F2' : '#fff',
@@ -335,8 +409,8 @@ function PeliculaForm({
     fontFamily: 'inherit',
   })
 
-  const label = { fontSize: 13, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }
-  const section = { fontSize: 13, fontWeight: 700, color: '#121212', margin: '0 0 12px', borderBottom: '2px solid #1C2566', paddingBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }
+  const label = { fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 3 }
+  const section = { fontSize: 12, fontWeight: 700, color: '#121212', margin: '0 0 10px', borderBottom: '2px solid #1C2566', paddingBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }
 
   const handleGuardar = () => {
     const errs = validarForm(form)
@@ -349,11 +423,36 @@ function PeliculaForm({
 
   const camposFaltantes = Object.keys(validarForm(form)).length
 
+  const addElencoEntry = () => {
+    setForm(f => ({ ...f, elenco: [...f.elenco, { actorId: null, nombre: '', personaje: '' }] }))
+  }
+
+  const removeElencoEntry = (idx) => {
+    setForm(f => ({ ...f, elenco: f.elenco.filter((_, i) => i !== idx) }))
+  }
+
+  const updateElencoEntry = (idx, field, value) => {
+    setForm(f => {
+      const elenco = [...f.elenco]
+      elenco[idx] = { ...elenco[idx], [field]: value }
+      if (field === 'actorId') {
+        if (value) {
+          const actor = actorsList.find(a => a.id_actor === value)
+          if (actor) elenco[idx].nombre = actor.nombre
+        } else {
+          elenco[idx].nombre = ''
+        }
+      }
+      return { ...f, elenco }
+    })
+    if (errores.elenco) setErrores(prev => ({ ...prev, elenco: undefined }))
+  }
+
   return (
     <>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', width: 600, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '88vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#121212', margin: 0 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', width: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#121212', margin: 0 }}>
             {initial ? 'Editar Película' : 'Nueva Película'}
           </h2>
           <button onClick={() => setShowDiscard(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: 4 }}>
@@ -361,8 +460,8 @@ function PeliculaForm({
           </button>
         </div>
 
-        {camposFaltantes > 0 && Object.keys(errores).length > 0 && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {camposFaltantes > 0 && Object.keys(errores).length > 0 && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon d={ICON_WARN} size={16} />
             <span style={{ fontSize: 13, color: '#DC2626', fontWeight: 600 }}>
               Completa todos los campos obligatorios ({camposFaltantes} pendiente{camposFaltantes !== 1 ? 's' : ''})
@@ -371,7 +470,7 @@ function PeliculaForm({
         )}
 
         <p style={section}>Información General</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={label}>Título *</label>
             <input style={fieldStyle('titulo')} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
@@ -386,13 +485,16 @@ function PeliculaForm({
             <FieldError msg={errores.clasificacion} />
           </div>
           <div>
-            <label style={label}>Duración * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(ej: 2h 30 min ó 150)</span></label>
-            <input style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="2h 30 min" />
+            <label style={label}>Duración * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(minutos, ej: 120)</span></label>
+            <input style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="120" type="number" min="1" />
             <FieldError msg={errores.duracion} />
           </div>
           <div>
             <label style={label}>Director *</label>
-            <input style={fieldStyle('director')} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
+            <select style={fieldStyle('director')} value={form.directorId || ''} onChange={e => set('directorId', e.target.value ? parseInt(e.target.value) : null)}>
+              <option value="">Seleccionar director</option>
+              {directors.map(d => <option key={d.id_director} value={d.id_director}>{d.nombre}</option>)}
+            </select>
             <FieldError msg={errores.director} />
           </div>
           <div>
@@ -405,8 +507,8 @@ function PeliculaForm({
         </div>
 
         <p style={section}>Géneros *</p>
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ ...label, marginBottom: 10 }}>Selecciona uno o más géneros</label>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ ...label, marginBottom: 8 }}>Selecciona uno o más géneros</label>
           <GeneroSelector
             value={form.generos}
             onChange={v => { set('generos', v); if (errores.generos) setErrores(prev => ({ ...prev, generos: undefined })) }}
@@ -416,7 +518,7 @@ function PeliculaForm({
         </div>
 
         <p style={section}>Multimedia</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
             <label style={label}>URL Poster *</label>
             <input style={fieldStyle('poster')} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
@@ -434,40 +536,60 @@ function PeliculaForm({
         </div>
 
         {form.poster && (
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 10 }}>
             <img src={form.poster} alt="preview" onError={e => e.target.style.display='none'}
-              style={{ height: 110, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
+              style={{ height: 90, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
           </div>
         )}
 
         <p style={section}>Descripción</p>
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 12 }}>
           <label style={label}>Sinopsis *</label>
-          <textarea style={{ ...fieldStyle('sinopsis'), minHeight: 90, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
+          <textarea style={{ ...fieldStyle('sinopsis'), minHeight: 70, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
           <FieldError msg={errores.sinopsis} />
         </div>
-        <div style={{ marginBottom: 28 }}>
-          <label style={label}>Elenco *</label>
-          <textarea style={{ ...fieldStyle('elenco'), minHeight: 56, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Actor 1, Actor 2, Actor 3..." />
+
+        <p style={section}>Reparto *</p>
+        <div style={{ marginBottom: 14 }}>
+          {form.elenco.map((entry, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'flex-start' }}>
+                <div style={{ flex: 2 }}>
+                  <select style={fieldStyle('elenco')} value={entry.actorId || ''} onChange={e => updateElencoEntry(idx, 'actorId', e.target.value ? parseInt(e.target.value) : null)}>
+                    <option value="">Seleccionar actor</option>
+                    {actorsList.map(a => <option key={a.id_actor} value={a.id_actor}>{a.nombre}</option>)}
+                  </select>
+                </div>
+              <div style={{ flex: 2 }}>
+                <input style={fieldStyle('elenco')} value={entry.personaje} onChange={e => updateElencoEntry(idx, 'personaje', e.target.value)} placeholder="Personaje" />
+              </div>
+              <button type="button" onClick={() => removeElencoEntry(idx)}
+                style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', color: '#EF4444', fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addElencoEntry}
+            style={{ padding: '6px 14px', border: '1px dashed #D1D5DC', borderRadius: 8, background: '#F9FAFB', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Icon d={ICON_PLUS} size={12} /> Agregar actor
+          </button>
           <FieldError msg={errores.elenco} />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
-          <button onClick={() => setShowDiscard(true)} disabled={saving} style={{ padding: '10px 24px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 6, borderTop: '1px solid #F3F4F6' }}>
+          <button onClick={() => setShowDiscard(true)} disabled={saving} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
           <button
             onClick={handleGuardar}
             disabled={saving}
             style={{
-              padding: '10px 28px',
+              padding: '8px 24px',
               border: 'none',
               borderRadius: 8,
               background: saving ? '#9CA3AF' : '#1C2566',
               color: '#fff',
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: 600,
               cursor: saving ? 'wait' : 'pointer',
               opacity: saving ? 0.7 : 1,
-              position: 'relative',
             }}
           >
             {saving ? 'Guardando...' : 'Guardar Película'}
@@ -479,6 +601,7 @@ function PeliculaForm({
   )
 }
 
+// ─── VerPelicula ──────────────────────────────────────────────────────────────
 function VerPelicula({ movie, onClose }) {
   if (!movie) return null
 
@@ -572,6 +695,7 @@ function VerPelicula({ movie, onClose }) {
   )
 }
 
+// ─── MovieCard ─────────────────────────────────────────────────────────────────
 function MovieCard({ movie, onEdit, onVer, onEliminar }) {
   return (
     <div className="movie-card">
@@ -619,6 +743,7 @@ function MovieCard({ movie, onEdit, onVer, onEliminar }) {
   )
 }
 
+// ─── Pagination ────────────────────────────────────────────────────────────────
 function Pagination({ total, page, perPage, onPage }) {
   const pages = Math.ceil(total / perPage)
   const start = (page - 1) * perPage + 1
@@ -645,11 +770,13 @@ export default function CatalogoPeliculas() {
   const [genres, setGenres]             = useState([])
   const [categories, setCategories]     = useState([])
   const [classifications, setClassifications] = useState([])
+  const [directors, setDirectors]       = useState([])
+  const [actorsList, setActorsList]     = useState([])
   const [filtroGenero, setFiltroGenero] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroClasif, setFiltroClasif] = useState('')
   const [page, setPage]                 = useState(1)
-  const PER_PAGE = 12
+  const PER_PAGE = 8
 
   const [modalAdd, setModalAdd]     = useState(false)
   const [modalEdit, setModalEdit]   = useState(null)
@@ -659,6 +786,8 @@ export default function CatalogoPeliculas() {
   const [errorMsg, setErrorMsg]     = useState('')
   const [saving, setSaving]         = useState(false)
   const [deleting, setDeleting]     = useState(false)
+  const [detailsCache, setDetailsCache] = useState({})
+  const fetchedIds = useRef(new Set())
 
   const fetchMovies = useCallback(async () => {
     setLoading(true)
@@ -674,14 +803,18 @@ export default function CatalogoPeliculas() {
 
   const loadMeta = useCallback(async () => {
     try {
-      const [genresData, categoriesData, classificationsData] = await Promise.all([
+      const [genresData, categoriesData, classificationsData, directorsData, actorsData] = await Promise.all([
         api.genres(),
         api.categories(),
-        api.classifications()
+        api.classifications(),
+        api.directors(),
+        api.actors(),
       ])
       setGenres(genresData || [])
       setCategories((categoriesData || []).map(c => typeof c === 'string' ? c : c.nombre))
       setClassifications((classificationsData || []).map(c => typeof c === 'string' ? c : c.nombre))
+      setDirectors(directorsData || [])
+      setActorsList(actorsData || [])
     } catch (e) {
       setErrorMsg(`Error cargando filtros: ${e.message}`)
     }
@@ -695,19 +828,28 @@ export default function CatalogoPeliculas() {
   const handleCreate = async (formData) => {
     setSaving(true)
     try {
-      const created = await api.create(frontendToBackend(formData))
-      setMovies(prev => [...prev, {
-        ...backendToFrontend(created),
-        generos: formData.generos
+      const payload = frontendToBackend(formData, 'create')
+      const created = await api.create(payload)
+      const movieId = created.id_pelicula || created.id
+      const det = await api.details(movieId)
+      const parsed = backendToFrontend(det)
+      const newMovie = {
+        ...parsed,
+        generos:  formData.generos
                     .map(id => {
                       const g = genres.find(g => g.id_genero === id)
                       return g ? g.nombre : null
                     })
                     .filter(Boolean),
         categoria: formData.categoria,
-        director:  formData.director,
-        elenco:    formData.elenco,
-      }])
+        director:  (Array.isArray(det.directores) ? det.directores.map(d => d.nombre).join(', ') : '') || '',
+        elenco:    (Array.isArray(det.actores) ? det.actores.map(a => {
+                      const personaje = a.personaje ? ` (${a.personaje})` : ''
+                      return `${a.nombre}${personaje}`
+                    }).join(', ') : ''),
+      }
+      setMovies(prev => [...prev, newMovie])
+      setDetailsCache(prev => ({ ...prev, [movieId]: { director: newMovie.director, directorId: parsed.directorId, elenco: newMovie.elenco } }))
       setModalAdd(false)
       setSuccessMsg('PELÍCULA AÑADIDA CORRECTAMENTE')
     } catch (e) {
@@ -720,24 +862,29 @@ export default function CatalogoPeliculas() {
   const handleUpdate = async (formData) => {
     setSaving(true)
     try {
-      const updated = await api.update(modalEdit.id, frontendToBackend(formData))
-      setMovies(prev => prev.map(m => m.id === modalEdit.id
-        ? {
-            ...backendToFrontend(updated),
-            id:        modalEdit.id,
-            generos:  formData.generos
-                        .map(id => {
-                          const g = genres.find(g => g.id_genero === id)
-                          return g ? g.nombre : null
-                        })
-                        .filter(Boolean),
-            categoria: formData.categoria,
-            director:  formData.director,
-            elenco:    formData.elenco,
-            duracion:  formData.duracion,
-          }
-        : m
-      ))
+      const payload = frontendToBackend(formData, 'update')
+      await api.update(modalEdit.id, payload)
+      const det = await api.details(modalEdit.id)
+      const parsed = backendToFrontend(det)
+      const updatedMovie = {
+        ...parsed,
+        id:        modalEdit.id,
+        generos:  formData.generos
+                    .map(id => {
+                      const g = genres.find(g => g.id_genero === id)
+                      return g ? g.nombre : null
+                    })
+                    .filter(Boolean),
+        categoria: formData.categoria,
+        director:  Array.isArray(det.directores) ? det.directores.map(d => d.nombre).join(', ') : '',
+        elenco:    Array.isArray(det.actores) ? det.actores.map(a => {
+                      const personaje = a.personaje ? ` (${a.personaje})` : ''
+                      return `${a.nombre}${personaje}`
+                    }).join(', ') : '',
+        duracion:  parsed.duracion,
+      }
+      setMovies(prev => prev.map(m => m.id === modalEdit.id ? updatedMovie : m))
+      setDetailsCache(prev => ({ ...prev, [modalEdit.id]: { director: updatedMovie.director, directorId: parsed.directorId, elenco: updatedMovie.elenco } }))
       setModalEdit(null)
       setSuccessMsg('PELÍCULA EDITADA CORRECTAMENTE')
     } catch (e) {
@@ -752,6 +899,7 @@ export default function CatalogoPeliculas() {
     try {
       await api.delete(modalDel.id)
       setMovies(prev => prev.filter(m => m.id !== modalDel.id))
+      setDetailsCache(prev => { const n = { ...prev }; delete n[modalDel.id]; return n })
       setModalDel(null)
     } catch (e) {
       setErrorMsg(`Error al eliminar película: ${e.message}`)
@@ -768,14 +916,14 @@ export default function CatalogoPeliculas() {
       setModalVer({
         ...parsed,
         generos:  (details.generos  || []).map(g => g.nombre ?? g),
-        elenco:   parsed.elenco   || movie.elenco   || '',
-        director: parsed.director || movie.director || '',
+        elenco:   parsed.elenco   || '',
+        director: parsed.director || '',
         poster:   parsed.poster   || movie.poster,
         trailer:  parsed.trailer  || movie.trailer,
         banner:   parsed.banner   || movie.banner,
       })
-    } catch {
-      setModalVer(movie)
+    } catch (e) {
+      setErrorMsg(`Error al cargar detalles: ${e.message}`)
     }
   }
 
@@ -789,6 +937,40 @@ export default function CatalogoPeliculas() {
   })
 
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  const enrichedPaginated = paginated.map(m => ({
+    ...m,
+    ...(detailsCache[m.id] || {}),
+  }))
+
+  // Enrich current page movies with director/actor data from details endpoint
+  useEffect(() => {
+    const idsToFetch = paginated
+      .filter(m => m.id && !fetchedIds.current.has(m.id))
+      .map(m => m.id)
+    if (idsToFetch.length === 0) return
+    idsToFetch.forEach(id => fetchedIds.current.add(id))
+    const doFetch = async () => {
+      const results = await Promise.allSettled(
+        idsToFetch.map(id => api.details(id))
+      )
+      const newCache = {}
+      results.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          const det = r.value
+          const parsed = backendToFrontend(det)
+          newCache[idsToFetch[idx]] = {
+            director: parsed.director || '',
+            directorId: parsed.directorId,
+            elenco: parsed.elenco || '',
+          }
+        }
+      })
+      if (Object.keys(newCache).length > 0) {
+        setDetailsCache(prev => ({ ...prev, ...newCache }))
+      }
+    }
+    doFetch()
+  }, [paginated])
 
   const dropStyle = {
     background: '#fff', border: '1px solid #D1D5DC', borderRadius: 10,
@@ -862,10 +1044,10 @@ export default function CatalogoPeliculas() {
       {/* Grid */}
       {loading
         ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>Cargando películas...</div>
-        : paginated.length === 0
+        : enrichedPaginated.length === 0
         ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>No se encontraron películas.</div>
-        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 18 }}>
-            {paginated.map(m => (
+        : <div className="movies-grid">
+            {enrichedPaginated.map(m => (
               <MovieCard
                 key={m.id}
                 movie={m}
@@ -877,18 +1059,29 @@ export default function CatalogoPeliculas() {
                       const found = genres.find(gen => gen.nombre === nombre)
                       return found ? found.id_genero : null
                     }).filter(Boolean)
+                    const parsed = backendToFrontend(details)
+                    const elencoForm = (details.actores || []).map(a => {
+                      const foundActor = actorsList.find(act => act.nombre === a.nombre)
+                      return {
+                        actorId: foundActor ? foundActor.id_actor : null,
+                        nombre: a.nombre || '',
+                        personaje: a.personaje || ''
+                      }
+                    })
                     setModalEdit({
-                      ...backendToFrontend({
-                        ...m,
-                        ...details,
-                      }),
+                      ...parsed,
                       id: m.id,
                       generos: generoIds,
-                      director: m.director,
-                      elenco: backendToFrontend(details).elenco || m.elenco,
+                      directorId: parsed.directorId,
+                      director: parsed.director,
+                      elenco: parsed.elenco || m.elenco || '',
+                      _elencoForm: elencoForm,
                     })
                   } catch (e) {
-                    setErrorMsg('Error cargando detalles de película')
+                    setModalEdit({
+                      ...m,
+                      _elencoForm: [],
+                    })
                   }
                 }}
                 onVer={() => handleVer(m)}
@@ -911,6 +1104,8 @@ export default function CatalogoPeliculas() {
             genres={genres}
             categories={categories}
             classifications={classifications}
+            directors={directors}
+            actorsList={actorsList}
           />
         </Overlay>
       )}
@@ -925,6 +1120,8 @@ export default function CatalogoPeliculas() {
             genres={genres}
             categories={categories}
             classifications={classifications}
+            directors={directors}
+            actorsList={actorsList}
           />
         </Overlay>
       )}
