@@ -10,6 +10,7 @@ const REEMBOLSOS_BASE    = '/api/api/reembolsos'
 const ADMIN_ID           = 1
 
 async function apiFetch(url, opts = {}) {
+  if (!url.startsWith('/api/')) throw new Error('URL no permitida')
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
