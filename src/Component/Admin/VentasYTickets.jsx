@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { jsPDF } from 'jspdf'
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const VENTAS_BASE  = '/api/api/ventas'
-const TICKETS_BASE = '/api/tickets'
+const VENTAS_BASE        = '/api/api/ventas'
+const TICKETS_BASE       = '/api/tickets'
+const PROMOTIONS_BASE    = '/api/promotions'
+const ADMIN_REEMBOLSOS   = '/api/api/admin/reembolsos'
+const REEMBOLSOS_BASE    = '/api/api/reembolsos'
+const ADMIN_ID           = 1
 
 async function apiFetch(url, opts = {}) {
+  if (!url.startsWith('/api/')) throw new Error('URL no permitida')
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
@@ -17,8 +23,6 @@ async function apiFetch(url, opts = {}) {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-const IGV_RATE = 0.18
-
 function detectTipo(tx) {
   const hasBoletos = tx.boletos?.length > 0
   const hasSnacks  = tx.snacks?.length > 0
@@ -32,38 +36,77 @@ function detectTipoFromListItem(tx) {
   return tx.tipo || 'Solo Entrada'
 }
 
-function calcSummary(detail) {
-  const dulceriaReal  = (detail.snacks || []).reduce((s, s2) => s + parseFloat(s2.subtotal || 0), 0)
-  const entradasReal  = (detail.boletos || []).reduce((s, b) => s + parseFloat(b.precio_pagado || 0), 0)
-  const descuento     = parseFloat(detail.descuento_aplicado || 0)
-  const totalReal     = entradasReal + dulceriaReal - descuento
-
-  const cargos        = 2.00
-
-  if (totalReal === 0) {
-    return { entradas: 0, dulceria: 0, descuento, cargos, igv: 0, total: 0, entradasReal, dulceriaReal }
+function calcSummary(detail, promocion) {
+  const entradas = (detail.boletos || []).reduce((s, b) => s + parseFloat(b.precio_pagado || 0), 0)
+  const dulceria = (detail.snacks || []).reduce((s, s2) => s + parseFloat(s2.subtotal || 0), 0)
+  const subtotal = entradas + dulceria
+  // Si el detalle no trajo items (back end no pudo hacer join con Asiento)
+  // pero el API sí reporta un monto, usamos ese monto en vez de 0.
+  if (subtotal === 0 && detail.monto_total > 0) {
+    return { entradas, dulceria, descuento: parseFloat(detail.descuento_aplicado || 0), total: detail.monto_total }
   }
-
-  const sinCargos     = totalReal - cargos
-  const igv           = parseFloat((sinCargos * IGV_RATE / (1 + IGV_RATE)).toFixed(2))
-  const ratio         = sinCargos / totalReal
-  const entradasNet   = parseFloat((entradasReal * ratio - igv * (entradasReal / totalReal)).toFixed(2))
-  const dulceriaNet   = parseFloat((sinCargos - igv - entradasNet).toFixed(2))
-
-  return {
-    entradas:     entradasNet,
-    dulceria:     dulceriaNet,
-    descuento,
-    cargos,
-    igv,
-    total:        totalReal,
-    entradasReal,
-    dulceriaReal,
-  }
+  const descuento = promocion?.porcentaje_descuento
+    ? subtotal * (parseFloat(promocion.porcentaje_descuento) / 100)
+    : promocion?.monto_descuento
+      ? Math.min(parseFloat(promocion.monto_descuento), subtotal)
+      : parseFloat(detail.descuento_aplicado || 0)
+  return { entradas, dulceria, descuento, total: Math.max(subtotal - descuento, 0) }
 }
 
 function fmtMoney(n) {
   return `S/ ${parseFloat(n).toFixed(2)}`
+}
+
+async function downloadTicketPdf(ticket, data) {
+  try {
+    const doc = new jsPDF({ unit: 'mm', format: [80, 150] })
+    const funcion = data.funcion || {}
+    const fecha = funcion.fecha_inicio ? new Date(funcion.fecha_inicio).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—'
+    const hora = funcion.fecha_inicio ? new Date(funcion.fecha_inicio).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '—'
+    let y = 10
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text(data.pelicula || '—', 40, y, { align: 'center' })
+    y += 6
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(data.sala || '—', 40, y, { align: 'center' })
+    y += 8
+    doc.setDrawColor(40, 53, 147)
+    doc.setLineWidth(0.5)
+    doc.line(5, y, 75, y)
+    y += 5
+    const rows = [
+      ['Asiento', ticket.asiento || '—'],
+      ['Cliente', data.cliente || '—'],
+      ['Fecha', fecha],
+      ['Hora', hora],
+      ['Transacción', data.transaccion_id || '—'],
+      ['Precio', fmtMoney(ticket.precio_pagado)],
+      ['Estado', ticket.estado_ingreso === 'Vigente' ? 'Válida' : 'Ya Usada'],
+    ]
+    for (const [label, value] of rows) {
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text(label, 8, y)
+      doc.setFont('helvetica', 'bold')
+      doc.text(value, 72, y, { align: 'right' })
+      y += 4.5
+    }
+    if (ticket.codigo_qr) {
+      y += 3
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.3)
+      doc.line(5, y, 75, y)
+      y += 4
+      doc.setFontSize(6)
+      doc.setFont('helvetica', 'normal')
+      doc.text(ticket.codigo_qr, 40, y, { align: 'center', maxWidth: 68 })
+    }
+    doc.save(`ticket_${data.transaccion_id || data.id_reserva}_${(ticket.asiento || 'X').replace(/\s/g, '')}.pdf`)
+  } catch (e) {
+    console.error('Error al descargar ticket PDF:', e)
+  }
 }
 
 function fmtDate(str, opts = {}) {
@@ -243,7 +286,7 @@ const TIPO_OPTIONS = [
 ]
 
 // ─── TAB: HISTORIAL ───────────────────────────────────────────────────────────
-function TabHistorial({ onSelectTransaction }) {
+function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
   const [estado,     setEstado]     = useState('')
   const [fecha,      setFecha]      = useState('')
   const [tipo,       setTipo]       = useState('')
@@ -251,18 +294,50 @@ function TabHistorial({ onSelectTransaction }) {
   const [buscar,     setBuscar]     = useState('')
   const [page,       setPage]       = useState(1)
   const [data,       setData]       = useState(null)
+  const [allData,    setAllData]    = useState([])
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState(null)
+  const [localTotals, setLocalTotals] = useState({})
 
   const fetchData = useCallback(async () => {
-    setLoading(true); setError(null)
+    setLoading(true); setError(null); setLocalTotals({})
     try {
       const params = new URLSearchParams({ page, limit: 10 })
       if (estado) params.append('estado', estado)
       if (fecha)  params.append('fecha',  fecha)
       if (buscar) params.append('buscar', buscar)
-      const res = await apiFetch(`${VENTAS_BASE}/transacciones?${params}`)
-      setData(res)
+      const paramsAll = new URLSearchParams({ page: 1, limit: 10000 })
+      if (estado) paramsAll.append('estado', estado)
+      if (fecha)  paramsAll.append('fecha',  fecha)
+      if (buscar) paramsAll.append('buscar', buscar)
+      const [txRes, allRes] = await Promise.all([
+        apiFetch(`${VENTAS_BASE}/transacciones?${params}`),
+        apiFetch(`${VENTAS_BASE}/transacciones?${paramsAll}`),
+      ])
+      setData(txRes)
+      setAllData(allRes?.data || [])
+      apiFetch(`${PROMOTIONS_BASE}/`).then(allPromos => {
+        const promoMap = {}
+        ;(allPromos || []).forEach(p => { promoMap[p.id_promocion] = p })
+        ;(txRes?.data || []).forEach(tx => {
+          apiFetch(`${TICKETS_BASE}/reservation/${tx.id_reserva}`).then(tb => {
+            const promo = tb?.reserva?.id_promocion ? promoMap[tb.reserva.id_promocion] : null
+            apiFetch(`${VENTAS_BASE}/transacciones/${tx.id_reserva}`).then(d => {
+              if (d) setLocalTotals(prev => ({ ...prev, [tx.id_reserva]: calcSummary(d, promo).total }))
+            }).catch(() => {})
+          }).catch(() => {
+            apiFetch(`${VENTAS_BASE}/transacciones/${tx.id_reserva}`).then(d => {
+              if (d) setLocalTotals(prev => ({ ...prev, [tx.id_reserva]: calcSummary(d).total }))
+            }).catch(() => {})
+          })
+        })
+      }).catch(() => {
+        ;(txRes?.data || []).forEach(tx => {
+          apiFetch(`${VENTAS_BASE}/transacciones/${tx.id_reserva}`).then(d => {
+            if (d) setLocalTotals(prev => ({ ...prev, [tx.id_reserva]: calcSummary(d).total }))
+          }).catch(() => {})
+        })
+      })
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [estado, fecha, buscar, page])
@@ -280,7 +355,6 @@ function TabHistorial({ onSelectTransaction }) {
     setPage(1)
   }
 
-  const metrics      = data?.metricas || data?.metrics || {}
   const transactions = data?.data || []
   const totalPages   = data?.totalPages || data?.total_pages || 1
 
@@ -288,11 +362,21 @@ function TabHistorial({ onSelectTransaction }) {
     ? transactions.filter(tx => detectTipoFromListItem(tx) === tipo)
     : transactions
 
+  const allFiltered = tipo
+    ? allData.filter(tx => detectTipoFromListItem(tx) === tipo)
+    : allData
+
+  const pagados = allFiltered.filter(tx => tx.estado_pago === 'Pagado')
+  const getMonto = (tx) => computedTotals[tx.id_reserva] ?? localTotals[tx.id_reserva] ?? tx.monto_total
+  const ingresosPagados = pagados.reduce((s, tx) => s + parseFloat(getMonto(tx) || 0), 0)
+  const reembolsosTotal = allFiltered.filter(tx => tx.estado_pago === 'Reembolsado').length
+  const ticketPromedio = pagados.length > 0 ? ingresosPagados / pagados.length : 0
+
   const metricas = [
-    { label: 'Ventas del Mes',    value: metrics.ventasMes     ?? metrics.total_ventas     ?? '—', sub: 'Boletos vendidos',   icon: '🎟️' },
-    { label: 'Ingresos Totales',  value: metrics.ingresosTotales != null ? fmtMoney(metrics.ingresosTotales) : metrics.ingresos_totales != null ? fmtMoney(metrics.ingresos_totales) : '—', sub: 'Este Mes', icon: '💰' },
-    { label: 'Reembolsos',        value: metrics.reembolsos    ?? metrics.total_reembolsos ?? '—', sub: 'Solicitudes',         icon: '↩️' },
-    { label: 'Ticket Promedio',   value: metrics.ticketPromedio != null ? fmtMoney(metrics.ticketPromedio) : metrics.ticket_promedio != null ? fmtMoney(metrics.ticket_promedio) : '—', sub: 'Por transacción', icon: '📊' },
+    { label: 'Transacciones',     value: allFiltered.length,                                     sub: 'Total registros', icon: '🎟️' },
+    { label: 'Ingresos',          value: fmtMoney(ingresosPagados),                              sub: 'Solo pagados',    icon: '💰' },
+    { label: 'Reembolsos',        value: reembolsosTotal,                                        sub: 'En listado',      icon: '↩️' },
+    { label: 'Ticket Promedio',   value: ticketPromedio > 0 ? fmtMoney(ticketPromedio) : '—',    sub: 'Por pago',        icon: '📊' },
   ]
 
   return (
@@ -392,7 +476,7 @@ function TabHistorial({ onSelectTransaction }) {
                   <td style={{ padding: '10px 14px', color: '#4A5565', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.pelicula || '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#4A5565' }}>{tx.sala || '—'}</td>
                   <td style={{ padding: '10px 14px' }}><TipoBadge tipo={detectTipoFromListItem(tx)} /></td>
-                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{tx.monto_total != null ? fmtMoney(tx.monto_total) : '—'}</td>
+                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{getMonto(tx) != null ? fmtMoney(getMonto(tx)) : '—'}</td>
                   <td style={{ padding: '10px 14px' }}><EstadoBadge estado={tx.estado_pago} /></td>
                   <td style={{ padding: '10px 14px' }}>
                     <button onClick={() => onSelectTransaction(tx.id_reserva)}
@@ -411,20 +495,208 @@ function TabHistorial({ onSelectTransaction }) {
   )
 }
 
+// ─── REEMBOLSO MODAL ──────────────────────────────────────────────────────────
+function ReembolsoModal({ reservationId, montoTotal, onClose, onCreated }) {
+  const [motivos,      setMotivos]      = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState(null)
+
+  const [idMotivo,     setIdMotivo]     = useState('')
+  const [detalle,      setDetalle]      = useState('')
+  const [tipoR,        setTipoR]        = useState('Reembolso total')
+  const [montoR,       setMontoR]       = useState(montoTotal)
+
+  useEffect(() => {
+    apiFetch(`${REEMBOLSOS_BASE}/motivos`)
+      .then(m => { setMotivos(m); if (m.length) setIdMotivo(m[0].id_motivo) })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSubmit = async () => {
+    if (!idMotivo) return
+    setSaving(true); setError(null)
+    try {
+      await apiFetch(`${REEMBOLSOS_BASE}/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id_reserva: reservationId,
+          id_motivo: idMotivo,
+          monto_reembolsado: parseFloat(montoR),
+          tipo_reembolso: tipoR,
+          detalle_motivo: detalle,
+        }),
+      })
+      onCreated()
+      onClose()
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Solicitar Reembolso</h3>
+
+        {loading ? <p style={{ color: '#9CA3AF' }}>Cargando motivos…</p> : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Motivo *</label>
+              <select value={idMotivo} onChange={e => setIdMotivo(Number(e.target.value))}
+                style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
+                {motivos.map(m => <option key={m.id_motivo} value={m.id_motivo}>{m.descripcion}</option>)}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Tipo de reembolso *</label>
+              <select value={tipoR} onChange={e => { setTipoR(e.target.value); if (e.target.value === 'Sin reembolso') setMontoR(0) }}
+                style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
+                <option value="Reembolso total">Reembolso total</option>
+                <option value="Reembolso parcial">Reembolso parcial</option>
+                <option value="Sin reembolso">Sin reembolso</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Monto a reembolsar *</label>
+              <input type="number" step="0.01" value={montoR} onChange={e => setMontoR(e.target.value)}
+                style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Detalle / Comentario</label>
+              <textarea value={detalle} onChange={e => setDetalle(e.target.value)} rows={3}
+                style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+            </div>
+
+            {error && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13, color: '#C2410C' }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={onClose} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleSubmit} disabled={saving || !idMotivo}
+                style={{ padding: '8px 24px', border: 'none', borderRadius: 8, background: saving ? '#9CA3AF' : '#C2410C', color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? 'Enviando…' : 'Solicitar Reembolso'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── RESOLVE MODAL ────────────────────────────────────────────────────────────
+function ResolveModal({ solicitud, onClose, onResolved }) {
+  const [estadoRes,     setEstadoRes]     = useState('Aprobada')
+  const [comentario,    setComentario]    = useState('')
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState(null)
+
+  const handleResolve = async () => {
+    setSaving(true); setError(null)
+    try {
+      await apiFetch(`${ADMIN_REEMBOLSOS}/${solicitud.id_solicitud}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          id_administrador: ADMIN_ID,
+          estado_solicitud: estadoRes,
+          comentario_resolucion: comentario,
+        }),
+      })
+      onResolved()
+      onClose()
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Resolver Solicitud #{solicitud.id_solicitud}</h3>
+        <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>
+          Reserva #{solicitud.id_reserva} · {fmtMoney(solicitud.monto_reembolsado)} · {solicitud.tipo_reembolso}
+        </p>
+        {solicitud.detalle_motivo && (
+          <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#374151' }}>
+            <strong>Detalle del cliente:</strong> {solicitud.detalle_motivo}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Decisión *</label>
+          <select value={estadoRes} onChange={e => setEstadoRes(e.target.value)}
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
+            <option value="Aprobada">Aprobar</option>
+            <option value="Rechazada">Rechazar</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Comentario de resolución</label>
+          <textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={3}
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+        </div>
+
+        {error && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13, color: '#C2410C' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={handleResolve} disabled={saving}
+            style={{ padding: '8px 24px', border: 'none', borderRadius: 8, background: saving ? '#9CA3AF' : '#283593', color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
+            {saving ? 'Guardando…' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── TAB: DETALLE DE COMPRA ───────────────────────────────────────────────────
-function TabDetalle({ reservationId, onBack }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
+function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
+  const [data,           setData]           = useState(null)
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState(null)
+  const [solicitudes,    setSolicitudes]    = useState([])
+  const [showRefund,     setShowRefund]     = useState(false)
+  const [resolveTarget,  setResolveTarget]  = useState(null)
+  const [refreshKey,     setRefreshKey]     = useState(0)
+  const [promocion,      setPromocion]      = useState(null)
 
   useEffect(() => {
     if (!reservationId) return
-    setLoading(true); setError(null); setData(null)
-    apiFetch(`${VENTAS_BASE}/transacciones/${reservationId}`)
-      .then(setData)
-      .catch(e => setError(e.message))
+    setLoading(true); setError(null); setData(null); setPromocion(null)
+    Promise.all([
+      apiFetch(`${VENTAS_BASE}/transacciones/${reservationId}`),
+      apiFetch(`${ADMIN_REEMBOLSOS}/`).catch(() => []),
+      apiFetch(`${TICKETS_BASE}/reservation/${reservationId}`).catch(() => null),
+    ]).then(([txData, sols, ticketBundle]) => {
+      setData(txData)
+      const s = calcSummary(txData)
+      if (onUpdateTotal) onUpdateTotal(reservationId, s.total)
+      setSolicitudes((sols || []).filter(s => s.id_reserva === reservationId))
+      if (ticketBundle?.reserva?.id_promocion) {
+        apiFetch(`${PROMOTIONS_BASE}/${ticketBundle.reserva.id_promocion}`).then(promo => {
+          setPromocion(promo)
+          if (onUpdateTotal) onUpdateTotal(reservationId, calcSummary(txData, promo).total)
+        }).catch(() => {})
+      }
+    }).catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [reservationId])
+  }, [reservationId, refreshKey])
+
+  const refreshSolicitudes = () => setRefreshKey(k => k + 1)
 
   if (!reservationId) return (
     <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 48, textAlign: 'center' }}>
@@ -447,7 +719,9 @@ function TabDetalle({ reservationId, onBack }) {
   const fechaFin    = funcion.fecha_fin    ? new Date(funcion.fecha_fin)    : null
   const duracion    = fechaInicio && fechaFin ? Math.round((fechaFin - fechaInicio) / 60000) + ' min' : '—'
   const asientos    = (data.boletos || []).map(b => b.asiento).join(', ')
-  const summary     = calcSummary(data)
+  const summary     = calcSummary(data, promocion)
+
+  const pendienteSolicitud = solicitudes.find(s => s.estado_solicitud === 'Pendiente')
 
   const historialTx = [
     { label: 'Compra completada',           fecha: data.fecha_reserva },
@@ -457,6 +731,22 @@ function TabDetalle({ reservationId, onBack }) {
 
   return (
     <div>
+      {showRefund && (
+        <ReembolsoModal
+          reservationId={reservationId}
+          montoTotal={summary.total}
+          onClose={() => setShowRefund(false)}
+          onCreated={refreshSolicitudes}
+        />
+      )}
+      {resolveTarget && (
+        <ResolveModal
+          solicitud={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+          onResolved={refreshSolicitudes}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -474,7 +764,6 @@ function TabDetalle({ reservationId, onBack }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <EstadoBadge estado={data.estado_pago === 'Pagado' ? 'Completada' : data.estado_pago} />
-          {/* Botón Descargar PDF con icono SVG */}
           <a
             href={`${TICKETS_BASE}/reservation/${data.id_reserva}/pdf`}
             target="_blank" rel="noopener noreferrer"
@@ -482,9 +771,12 @@ function TabDetalle({ reservationId, onBack }) {
             <DownloadIcon size={15} color="#374151" />
             Descargar PDF
           </a>
-          <button style={{ padding: '7px 16px', border: '1px solid #FCA5A5', borderRadius: 8, background: '#FFF1F2', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#C2410C' }}>
-            Solicitar Reembolso
-          </button>
+          {!pendienteSolicitud && data.estado_pago === 'Pagado' && (
+            <button onClick={() => setShowRefund(true)}
+              style={{ padding: '7px 16px', border: '1px solid #FCA5A5', borderRadius: 8, background: '#FFF1F2', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#C2410C' }}>
+              Solicitar Reembolso
+            </button>
+          )}
         </div>
       </div>
 
@@ -520,17 +812,17 @@ function TabDetalle({ reservationId, onBack }) {
 
           <DetalleCard>
             <DetalleSectionTitle>Productos Adquiridos</DetalleSectionTitle>
-            {data.boletos?.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
+            {data.boletos?.length > 0 && data.boletos.map((b, i) => (
+              <div key={b.id_boleto} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>Entrada General × {data.boletos.length}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>{data.sala} · Asientos {asientos}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>Asiento {b.asiento}</p>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>{data.sala} · Entrada</p>
                 </div>
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{fmtMoney(summary.entradasReal)}</p>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{fmtMoney(b.precio_pagado)}</p>
               </div>
-            )}
+            ))}
             {(data.snacks || []).map((s, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: i < (data.boletos?.length || 0) + (data.snacks?.length || 0) - 1 ? '1px solid #F3F4F6' : 'none' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>{s.producto} × {s.cantidad}</p>
                   <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>Dulcería</p>
@@ -542,6 +834,42 @@ function TabDetalle({ reservationId, onBack }) {
               <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0 }}>Sin productos registrados.</p>
             )}
           </DetalleCard>
+
+          {/* Solicitudes de Reembolso */}
+          {solicitudes.length > 0 && (
+            <DetalleCard>
+              <DetalleSectionTitle>Solicitudes de Reembolso</DetalleSectionTitle>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {solicitudes.map(sol => (
+                  <div key={sol.id_solicitud} style={{ padding: '12px 14px', border: '1px solid #E5E7EB', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#283593' }}>#{sol.id_solicitud}</span>
+                      <EstadoBadge estado={sol.estado_solicitud === 'Aprobada' ? 'Aprobada' : sol.estado_solicitud === 'Rechazada' ? 'Rechazada' : 'Pendiente'} />
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>
+                      {fmtDate(sol.fecha_solicitud)} · {sol.tipo_reembolso} · {fmtMoney(sol.monto_reembolsado)}
+                    </div>
+                    {sol.detalle_motivo && (
+                      <div style={{ fontSize: 12, color: '#374151', background: '#F9FAFB', borderRadius: 6, padding: '6px 10px', marginTop: 4 }}>
+                        {sol.detalle_motivo}
+                      </div>
+                    )}
+                    {sol.comentario_resolucion && (
+                      <div style={{ fontSize: 12, color: '#C2410C', background: '#FFF1F2', borderRadius: 6, padding: '6px 10px', marginTop: 4 }}>
+                        <strong>Resolución:</strong> {sol.comentario_resolucion}
+                      </div>
+                    )}
+                    {sol.estado_solicitud === 'Pendiente' && (
+                      <button onClick={() => setResolveTarget(sol)}
+                        style={{ marginTop: 8, padding: '5px 12px', border: '1px solid #283593', borderRadius: 6, background: '#EEF2FF', color: '#283593', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        Resolver
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </DetalleCard>
+          )}
         </div>
 
         {/* Columna derecha */}
@@ -549,20 +877,27 @@ function TabDetalle({ reservationId, onBack }) {
           <DetalleCard>
             <DetalleSectionTitle>Resumen de Pago</DetalleSectionTitle>
             <div style={{ fontSize: 14 }}>
-              {[
-                { label: `Entradas (×${data.boletos?.length || 0})`, val: summary.entradas,   color: '#121212' },
-                { label: 'Dulcería',                                  val: summary.dulceria,   color: '#121212' },
-                { label: 'Cargos por servicio',                       val: summary.cargos,     color: '#121212' },
-                { label: 'Descuentos aplicados',                      val: -summary.descuento, color: '#008236', hide: summary.descuento === 0 },
-                { label: 'IGV (18%)',                                  val: summary.igv,        color: '#121212' },
-              ].filter(r => !r.hide).map((row, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: i === 0 ? '1px solid #F3F4F6' : 'none' }}>
-                  <span style={{ color: '#6B7280' }}>{row.label}</span>
-                  <span style={{ fontWeight: 500, color: row.color }}>
-                    {row.val < 0 ? `– ${fmtMoney(Math.abs(row.val))}` : fmtMoney(row.val)}
-                  </span>
+              {(data.boletos?.length || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid #F3F4F6' }}>
+                  <span style={{ color: '#6B7280' }}>Entradas (×{data.boletos?.length})</span>
+                  <span style={{ fontWeight: 500, color: '#121212' }}>{fmtMoney(summary.entradas)}</span>
                 </div>
-              ))}
+              )}
+
+              {summary.dulceria > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <span style={{ color: '#6B7280' }}>Dulcería</span>
+                  <span style={{ fontWeight: 500, color: '#121212' }}>{fmtMoney(summary.dulceria)}</span>
+                </div>
+              )}
+              {summary.descuento > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <span style={{ color: '#6B7280' }}>
+                    Descuento{promocion ? ` (${promocion.codigo_cupon}${promocion.porcentaje_descuento ? ` - ${promocion.porcentaje_descuento}%` : ''})` : ''}
+                  </span>
+                  <span style={{ fontWeight: 500, color: '#008236' }}>–{fmtMoney(summary.descuento)}</span>
+                </div>
+              )}
               <div style={{ borderTop: '1px solid #E5E7EB', marginTop: 6, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 700, fontSize: 15 }}>Total Pagado</span>
                 <span style={{ fontWeight: 700, fontSize: 16 }}>{fmtMoney(summary.total)}</span>
@@ -609,14 +944,12 @@ function TabDetalle({ reservationId, onBack }) {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <EstadoBadge estado={b.estado_ingreso === 'Vigente' ? 'Válida' : 'Ya Usada'} />
-                      {/* Icono descarga SVG en lugar del emoji ⬇ */}
-                      <a
-                        href={`${TICKETS_BASE}/reservation/${data.id_reserva}/pdf`}
-                        target="_blank" rel="noopener noreferrer"
-                        title="Descargar ticket"
-                        style={{ color: '#6B7280', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                      <button
+                        onClick={() => downloadTicketPdf(b, data)}
+                        title="Descargar ticket individual"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#6B7280', display: 'inline-flex', alignItems: 'center' }}>
                         <DownloadIcon size={18} color="#6B7280" />
-                      </a>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -630,44 +963,151 @@ function TabDetalle({ reservationId, onBack }) {
 }
 
 // ─── TAB: DEVOLUCIONES ────────────────────────────────────────────────────────
+const SOLICITUD_ESTADOS = [
+  { label: 'Todos los estados',   value: '' },
+  { label: 'Pendientes',          value: 'Pendiente' },
+  { label: 'Aprobadas',           value: 'Aprobada' },
+  { label: 'Rechazadas',          value: 'Rechazada' },
+]
+
 function TabDevoluciones() {
   const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [motivoFiltro, setMotivoFiltro] = useState('')
+  const [fecha,        setFecha]        = useState('')
   const [buscarTemp,   setBuscarTemp]   = useState('')
   const [buscar,       setBuscar]       = useState('')
   const [page,         setPage]         = useState(1)
   const [data,         setData]         = useState(null)
+  const [metrics,      setMetrics]      = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
+  const [motivos,      setMotivos]      = useState([])
+  const [resolveTarget, setResolveTarget] = useState(null)
+  const [detailTarget, setDetailTarget]   = useState(null)
+  const [refreshKey,   setRefreshKey]   = useState(0)
+  const [now, setNow] = useState(0)
+  useEffect(() => { setNow(Date.now()) }, [fecha])
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const params = new URLSearchParams({ page, limit: 10 })
-      params.append('estado', estadoFiltro || 'Reembolsado')
-      if (buscar) params.append('buscar', buscar)
-      const res = await apiFetch(`${VENTAS_BASE}/transacciones?${params}`)
-      setData(res)
+      const params = new URLSearchParams({ page: 1, limit: 200 })
+      const [sols, met, mot] = await Promise.all([
+        apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`),
+        apiFetch(`${ADMIN_REEMBOLSOS}/metricas`),
+        apiFetch(`${REEMBOLSOS_BASE}/motivos`),
+      ])
+      setData(sols || [])
+      setMetrics(met || {})
+      setMotivos(mot || [])
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [estadoFiltro, buscar, page])
+  }, [refreshKey])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const transactions = data?.data || []
-  const totalPages   = data?.totalPages || data?.total_pages || 1
-  const metrics      = data?.metricas || data?.metrics || {}
+  const motivoMap = {}
+  motivos.forEach(m => { motivoMap[m.id_motivo] = m.descripcion })
 
-  const metricas = [
-    { label: 'Solicitudes Totales', value: metrics.ventasMes ?? metrics.total_ventas ?? '—',     sub: 'Este mes',           iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
-    { label: 'Pendientes',          value: '—',                                                    sub: 'Requieren revisión', iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
-    { label: 'Reembolsadas',        value: metrics.reembolsos ?? metrics.total_reembolsos ?? '—', sub: 'Reembolso procesado', iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
-    { label: 'Monto Devuelto',      value: '—',                                                    sub: 'Total mes',          iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
+  const allSolicitudes = data || []
+  const hayFiltrosActivos = estadoFiltro || motivoFiltro || fecha || buscar
+
+  const handleLimpiarFiltros = () => {
+    setEstadoFiltro('')
+    setMotivoFiltro('')
+    setFecha('')
+    setBuscarTemp('')
+    setBuscar('')
+    setPage(1)
+  }
+
+  const filtered = allSolicitudes.filter(s => {
+    if (estadoFiltro && s.estado_solicitud !== estadoFiltro) return false
+    if (motivoFiltro && s.id_motivo !== Number(motivoFiltro)) return false
+    if (buscar) {
+      const q = buscar.toLowerCase()
+      const motivoDesc = (motivoMap[s.id_motivo] || '').toLowerCase()
+      if (!`#${s.id_solicitud}`.includes(q) &&
+          !`#${s.id_reserva}`.includes(q) &&
+          !motivoDesc.includes(q)) return false
+    }
+    if (fecha && s.fecha_solicitud) {
+      const t = new Date(s.fecha_solicitud).getTime()
+      if (isNaN(t)) return true
+      const dias = { '1d': 1, '7d': 7, '30d': 30 }[fecha]
+      if (dias && (now - t) > dias * 86400000) return false
+    }
+    return true
+  })
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
+  const paginated = filtered.slice((page - 1) * 10, page * 10)
+
+  const metricCards = [
+    { label: 'Solicitudes Totales', value: allSolicitudes.length,             sub: 'Todas las solicitudes', iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
+    { label: 'Pendientes',          value: metrics?.pendientes ?? '—',        sub: 'Requieren revisión',    iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
+    { label: 'Aprobadas',           value: metrics?.aprobadas ?? '—',         sub: 'Reembolso procesado',   iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
+    { label: 'Monto Devuelto',      value: metrics?.monto_total_aprobado != null ? fmtMoney(metrics.monto_total_aprobado) : '—', sub: 'Total aprobado', iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
+  ]
+
+  const motivoOptions = [
+    { label: 'Todos los motivos', value: '' },
+    ...motivos.map(m => ({ label: m.descripcion, value: String(m.id_motivo) })),
   ]
 
   return (
     <div>
+      {resolveTarget && (
+        <ResolveModal
+          solicitud={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+          onResolved={() => { setRefreshKey(k => k + 1); setPage(1) }}
+        />
+      )}
+      {detailTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={e => e.target === e.currentTarget && setDetailTarget(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Detalle de Solicitud #{detailTarget.id_solicitud}</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 16 }}>
+              {[
+                ['ID Reserva', `#${detailTarget.id_reserva}`],
+                ['Fecha Solicitud', fmtDateTime(detailTarget.fecha_solicitud)],
+                ['Motivo', motivoMap[detailTarget.id_motivo] || `#${detailTarget.id_motivo}`],
+                ['Monto', fmtMoney(detailTarget.monto_reembolsado)],
+                ['Tipo', detailTarget.tipo_reembolso],
+                ['Estado', detailTarget.estado_solicitud],
+              ].map(([lbl, val]) => (
+                <div key={lbl}>
+                  <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{lbl}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>{val}</p>
+                </div>
+              ))}
+            </div>
+            {detailTarget.detalle_motivo && (
+              <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Detalle del cliente</p>
+                <p style={{ margin: 0, fontSize: 14, color: '#374151' }}>{detailTarget.detalle_motivo}</p>
+              </div>
+            )}
+            {detailTarget.comentario_resolucion && (
+              <div style={{ background: '#FFF1F2', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Resolución</p>
+                <p style={{ margin: 0, fontSize: 14, color: '#C2410C' }}>{detailTarget.comentario_resolucion}</p>
+              </div>
+            )}
+            {detailTarget.fecha_resolucion && (
+              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>Resuelto el {fmtDateTime(detailTarget.fecha_resolucion)}</p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => setDetailTarget(null)} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
-        {metricas.map(c => (
+        {metricCards.map(c => (
           <div key={c.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 20 }}>
             <div style={{ width: 40, height: 40, borderRadius: 8, background: c.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: c.iconColor, marginBottom: 12, fontWeight: 700 }}>{c.icon}</div>
             <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 4 }}>{c.label}</div>
@@ -679,76 +1119,160 @@ function TabDevoluciones() {
 
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '18px 20px', marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <SearchInput label="Buscar solicitud" placeholder="ID reserva, cliente" value={buscarTemp} onChange={setBuscarTemp} />
+          <SearchInput
+            label="Buscar"
+            placeholder="#ID, reserva, motivo"
+            value={buscarTemp}
+            onChange={setBuscarTemp}
+          />
           <SelectFilter
             label="Estado"
-            options={[
-              { label: 'Reembolsados', value: 'Reembolsado' },
-              { label: 'Cancelados',   value: 'Cancelado' },
-            ]}
-            value={estadoFiltro || 'Reembolsado'} onChange={v => { setEstadoFiltro(v); setPage(1) }}
+            options={SOLICITUD_ESTADOS}
+            value={estadoFiltro} onChange={v => { setEstadoFiltro(v); setPage(1) }}
           />
-          <button onClick={() => { setBuscar(buscarTemp); setPage(1) }}
-            style={{ background: '#283593', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38, whiteSpace: 'nowrap' }}>
+          <SelectFilter
+            label="Motivo"
+            options={motivoOptions}
+            value={motivoFiltro} onChange={v => { setMotivoFiltro(v); setPage(1) }}
+          />
+          <SelectFilter
+            label="Período"
+            options={FECHA_OPTIONS}
+            value={fecha} onChange={v => { setFecha(v); setPage(1) }}
+          />
+          <button
+            onClick={() => { setBuscar(buscarTemp); setPage(1) }}
+            style={{
+              background: '#283593', color: '#fff', border: 'none',
+              borderRadius: 8, padding: '9px 18px', fontSize: 14,
+              fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38,
+            }}>
             Aplicar filtros
           </button>
+          {hayFiltrosActivos && (
+            <button
+              onClick={handleLimpiarFiltros}
+              style={{
+                background: '#fff', color: '#6B7280',
+                border: '1px solid #D1D5DC', borderRadius: 8,
+                padding: '9px 18px', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', alignSelf: 'flex-end', height: 38,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>
+              ✕ Limpiar filtros
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px 12px' }}>
           <h3 style={{ fontSize: 17, fontWeight: 700, color: '#121212', margin: 0 }}>Gestión de devoluciones y reembolsos</h3>
-          <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0' }}>Transacciones reembolsadas o canceladas</p>
+          <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0' }}>Solicitudes de reembolso registradas en el sistema</p>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#ECEFF1' }}>
-                {['ID Reserva', 'Fecha', 'Cliente', 'Película', 'Monto', 'Estado'].map(h => (
+                {['ID Solicitud', 'Reserva', 'Fecha', 'Motivo', 'Monto', 'Tipo', 'Estado', 'Acción'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#4A5565', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? <LoadingRow colSpan={6} /> :
-               error   ? <ErrorRow  colSpan={6} message={error} /> :
-               transactions.length === 0 ? <EmptyTableMessage colSpan={6} message="No hay devoluciones para mostrar." /> :
-               transactions.map(tx => (
-                <tr key={tx.id_reserva} style={{ borderTop: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600 }}>#{tx.id_reserva}</td>
-                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>{fmtDate(tx.fecha_compra)}</td>
-                  <td style={{ padding: '10px 14px' }}>{tx.cliente || '—'}</td>
-                  <td style={{ padding: '10px 14px' }}>{tx.pelicula || '—'}</td>
-                  <td style={{ padding: '10px 14px', fontWeight: 600 }}>{tx.monto_total != null ? fmtMoney(tx.monto_total) : '—'}</td>
-                  <td style={{ padding: '10px 14px' }}><EstadoBadge estado={tx.estado_pago} /></td>
+              {loading ? <LoadingRow colSpan={8} /> :
+               error   ? <ErrorRow  colSpan={8} message={error} /> :
+               paginated.length === 0 ? <EmptyTableMessage colSpan={8} message="No hay solicitudes de reembolso para mostrar." /> :
+               paginated.map(sol => (
+                <tr key={sol.id_solicitud} style={{ borderTop: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>#{sol.id_solicitud}</td>
+                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#4A5565' }}>#{sol.id_reserva}</td>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#4A5565' }}>{fmtDate(sol.fecha_solicitud)}</td>
+                  <td style={{ padding: '10px 14px', color: '#121212', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {motivoMap[sol.id_motivo] || `#${sol.id_motivo}`}
+                  </td>
+                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{fmtMoney(sol.monto_reembolsado)}</td>
+                  <td style={{ padding: '10px 14px', color: '#4A5565', fontSize: 12 }}>{sol.tipo_reembolso}</td>
+                  <td style={{ padding: '10px 14px' }}><EstadoBadge estado={sol.estado_solicitud === 'Aprobada' ? 'Aprobada' : sol.estado_solicitud === 'Rechazada' ? 'Rechazada' : 'Pendiente'} /></td>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setDetailTarget(sol)}
+                        style={{ padding: '4px 10px', border: '1px solid #D1D5DC', borderRadius: 6, background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#4A5565' }}>
+                        Detalle
+                      </button>
+                      {sol.estado_solicitud === 'Pendiente' && (
+                        <button onClick={() => setResolveTarget(sol)}
+                          style={{ padding: '4px 14px', border: '1px solid #283593', borderRadius: 6, background: '#EEF2FF', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#283593' }}>
+                          Resolver
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <PaginationBar page={page} totalPages={totalPages} onPrev={() => setPage(p => p - 1)} onNext={() => setPage(p => p + 1)} />
+        {filtered.length > 10 && (
+          <PaginationBar page={page} totalPages={totalPages} onPrev={() => setPage(p => p - 1)} onNext={() => setPage(p => p + 1)} />
+        )}
       </div>
     </div>
   )
 }
 
 // ─── TAB: VALIDACIÓN ──────────────────────────────────────────────────────────
-// Conjunto global de códigos ya usados en la sesión (persiste entre renders)
-const codigosUsadosEnSesion = new Set()
+// Persistencia en localStorage para que sobreviva a reinicios de la app
+const STORAGE_KEY_LOG = 'ventas_log_entries'
+const STORAGE_KEY_CODIGOS = 'ventas_codigos_usados'
+
+function cargarStorage(key, def) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : def
+  } catch { return def }
+}
+function guardarStorage(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* ignore */ }
+}
+
+const codigosUsadosEnSesion = new Set(cargarStorage(STORAGE_KEY_CODIGOS, []))
+let _logEntries = cargarStorage(STORAGE_KEY_LOG, [])
+let _resultado  = null
 
 const LOG_PER_PAGE = 10
 
 function TabValidacion() {
-  const [codigoInput, setCodigoInput] = useState('')
-  const [resultado,   setResultado]   = useState(null)
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState(null)
-  const [logEntries,  setLogEntries]  = useState([])
-  const [logPage,     setLogPage]     = useState(1)
+  const [codigoInput, setCodigoInput]   = useState('')
+  const [resultado,   setResultado]     = useState(_resultado)
+  const [loading,     setLoading]       = useState(false)
+  const [error,       setError]         = useState(null)
+  const [logEntries,  setLogEntries]    = useState(_logEntries)
+  const [logPage,     setLogPage]       = useState(1)
+
+  const setLogEntriesPersist = (v) => {
+    _logEntries = typeof v === 'function' ? v(_logEntries) : v
+    guardarStorage(STORAGE_KEY_LOG, _logEntries)
+    setLogEntries(_logEntries)
+  }
+
+  const setResultadoPersist = (v) => {
+    _resultado = typeof v === 'function' ? v(_resultado) : v
+    setResultado(_resultado)
+  }
 
   const handleValidar = async () => {
-    const codigo = codigoInput.trim()
-    if (!codigo) return
+    const raw = codigoInput.trim()
+    if (!raw) return
+
+    // Intentar extraer codigo_qr desde JSON del QR escaneado
+    let codigo = raw
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed?.boletos?.[0]?.codigo_qr) {
+        codigo = parsed.boletos[0].codigo_qr
+      }
+    } catch (_) { /* no es JSON, usar raw */ }
 
     // ── FIX: detectar código ya usado en esta sesión ──────────────────────
     if (codigosUsadosEnSesion.has(codigo)) {
@@ -759,26 +1283,27 @@ function TabValidacion() {
         asiento:   '—',
         resultado: 'Ya Usada',
       }
-      setResultado({ valido: false, estado: 'Esta entrada ya fue usada anteriormente en esta sesión.' })
-      setLogEntries(prev => [entradaYaUsada, ...prev].slice(0, 200))
+      setResultadoPersist({ valido: false, estado: 'Esta entrada ya fue usada anteriormente en esta sesión.' })
+      setLogEntriesPersist(prev => [entradaYaUsada, ...prev].slice(0, 200))
       setLogPage(1)
       return
     }
 
-    setLoading(true); setError(null); setResultado(null)
+    setLoading(true); setError(null); setResultadoPersist(null)
     try {
-      const body = codigo.startsWith('QR_')
-        ? { codigo_qr: codigo }
-        : { codigo: codigo }
-      const res = await apiFetch(`${VENTAS_BASE}/validar`, { method: 'POST', body: JSON.stringify(body) })
+      // Si no parece UUID (32 hex), asumir código de transacción
+      const esUUID = /^[0-9a-f]{32}$/i.test(codigo)
+      const payload = esUUID ? { codigo_qr: codigo } : { codigo: codigo }
+      const res = await apiFetch(`${VENTAS_BASE}/validar`, { method: 'POST', body: JSON.stringify(payload) })
 
       // Si la entrada es válida, marcarla como usada para esta sesión
       if (res.valido) {
         codigosUsadosEnSesion.add(codigo)
+        guardarStorage(STORAGE_KEY_CODIGOS, [...codigosUsadosEnSesion])
       }
 
-      setResultado(res)
-      setLogEntries(prev => [{
+      setResultadoPersist(res)
+      setLogEntriesPersist(prev => [{
         ticket_id: codigo,
         hora:      new Date().toLocaleTimeString('es-PE'),
         cliente:   res.cliente  || '—',
@@ -815,7 +1340,7 @@ function TabValidacion() {
             type="text" value={codigoInput}
             onChange={e => setCodigoInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleValidar()}
-            placeholder="Ej: QR_TK_1001_FUNC1_AS1"
+            placeholder="Escanear código QR de la entrada"
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
           />
           <button onClick={handleValidar} disabled={loading}
@@ -854,7 +1379,7 @@ function TabValidacion() {
         <div style={{ padding: '18px 20px 12px' }}>
           <h3 style={{ fontSize: 17, fontWeight: 700, color: '#121212', margin: 0 }}>Log de validaciones</h3>
           <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0' }}>
-            Últimas entradas registradas en esta sesión
+            Últimas entradas registradas (persiste al recargar)
             {logEntries.length > 0 && ` · ${logEntries.length} registro${logEntries.length !== 1 ? 's' : ''}`}
           </p>
         </div>
@@ -907,10 +1432,15 @@ const TABS = [
 export default function VentasYTickets() {
   const [tabActiva,             setTabActiva]             = useState(0)
   const [selectedReservationId, setSelectedReservationId] = useState(null)
+  const [computedTotals,        setComputedTotals]        = useState({})
 
   const handleSelectTransaction = (id) => {
     setSelectedReservationId(id)
     setTabActiva(1)
+  }
+
+  const handleUpdateTotal = (id, total) => {
+    setComputedTotals(prev => ({ ...prev, [id]: total }))
   }
 
   return (
@@ -935,8 +1465,8 @@ export default function VentasYTickets() {
         </div>
       </div>
 
-      {tabActiva === 0 && <TabHistorial onSelectTransaction={handleSelectTransaction} />}
-      {tabActiva === 1 && <TabDetalle reservationId={selectedReservationId} onBack={() => setTabActiva(0)} />}
+      {tabActiva === 0 && <TabHistorial onSelectTransaction={handleSelectTransaction} computedTotals={computedTotals} />}
+      {tabActiva === 1 && <TabDetalle reservationId={selectedReservationId} onBack={() => setTabActiva(0)} onUpdateTotal={handleUpdateTotal} />}
       {tabActiva === 2 && <TabDevoluciones />}
       {tabActiva === 3 && <TabValidacion />}
     </div>

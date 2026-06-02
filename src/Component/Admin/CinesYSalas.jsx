@@ -161,6 +161,79 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
   )
 }
 
+// ─── MODAL AGREGAR / EDITAR CINE ─────────────────────────────────────────────
+function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
+  const [nombre,    setNombre]    = useState(cineInicial?.nombre    ?? '')
+  const [direccion, setDireccion] = useState(cineInicial?.direccion ?? '')
+  const [ciudad,    setCiudad]    = useState(cineInicial?.ciudad    ?? '')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState(null)
+
+  const handleGuardar = async () => {
+    if (!nombre.trim() || !direccion.trim() || !ciudad.trim()) { setError('Completa todos los campos.'); return }
+    setLoading(true); setError(null)
+    try {
+      const body = { nombre: nombre.trim(), direccion: direccion.trim(), ciudad: ciudad.trim() }
+      if (modo === 'crear') {
+        await apiFetch(`${CINEMAS_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
+      } else {
+        await apiFetch(`${CINEMAS_BASE}/${cineInicial.id_cine}`, { method: 'PUT', body: JSON.stringify(body) })
+      }
+      onGuardado()
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 460,
+        padding: '28px 32px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#121212', margin: 0 }}>
+            {modo === 'crear' ? 'Agregar Cine' : 'Editar Cine'}
+          </h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9CA3AF', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Field label="Nombre del cine">
+            <input value={nombre} onChange={e => setNombre(e.target.value)}
+              placeholder="Ej. Filmate Centro" style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Dirección">
+              <input value={direccion} onChange={e => setDireccion(e.target.value)}
+                placeholder="Ej. Av. Larco 123" style={inputStyle} />
+            </Field>
+            <Field label="Ciudad">
+              <input value={ciudad} onChange={e => setCiudad(e.target.value)}
+                placeholder="Ej. Lima" style={inputStyle} />
+            </Field>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF1F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 13, color: '#C2410C' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={btnSecundario}>Cancelar</button>
+          <button onClick={handleGuardar} disabled={loading} style={{ ...btnPrimario, opacity: loading ? 0.7 : 1 }}>
+            {loading ? 'Guardando…' : modo === 'crear' ? 'Agregar' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -225,6 +298,8 @@ export default function CinesYSalas() {
 
   // Modales
   const [modalSala,         setModalSala]         = useState(null)  // null | 'crear' | 'editar'
+  const [modalCine,         setModalCine]         = useState(null)  // null | 'crear' | 'editar'
+  const [cineEditando,      setCineEditando]      = useState(null)
   const [confirmarElim,     setConfirmarElim]     = useState(null)  // null | { tipo, item }
   const [loadingElim,       setLoadingElim]       = useState(false)
 
@@ -275,11 +350,36 @@ export default function CinesYSalas() {
     finally { setLoadingElim(false) }
   }
 
+  // ── Eliminar cine ──
+  const handleEliminarCine = async () => {
+    setLoadingElim(true)
+    try {
+      await apiFetch(`${CINEMAS_BASE}/${confirmarElim.item.id_cine}`, { method: 'DELETE' })
+      if (cineSeleccionado?.id_cine === confirmarElim.item.id_cine) {
+        setCineSeleccionado(null)
+        setSalaSeleccionada(null)
+      }
+      await cargarCines()
+      setConfirmarElim(null)
+    } catch (e) { alert('Error al eliminar: ' + e.message) }
+    finally { setLoadingElim(false) }
+  }
+
+  // ── Confirmar eliminación (sala o cine) ──
+  const handleConfirmarElim = confirmarElim?.tipo === 'sala' ? handleEliminarSala : handleEliminarCine
+
   // ── Al guardar sala (crear/editar) ──
   const handleGuardadoSala = async () => {
     setModalSala(null)
     setSalaSeleccionada(null)
     await cargarSalas()
+  }
+
+  // ── Al guardar cine (crear/editar) ──
+  const handleGuardadoCine = async () => {
+    setModalCine(null)
+    setCineEditando(null)
+    await cargarCines()
   }
 
   return (
@@ -311,9 +411,8 @@ export default function CinesYSalas() {
                 Cines
               </span>
               <button
-                onClick={() => {/* Sin endpoint aún */}}
+                onClick={() => setModalCine('crear')}
                 style={{ ...btnPrimario, padding: '5px 12px', fontSize: 12 }}
-                title="Próximamente"
               >
                 + Agregar Cine
               </button>
@@ -365,18 +464,32 @@ export default function CinesYSalas() {
                     }}>
                       {cine.estado ? 'Activo' : 'Inactivo'}
                     </span>
-                    {/* Botón eliminar cine (sin endpoint aún) */}
-                    <button
-                      onClick={e => { e.stopPropagation() /* Sin endpoint aún */ }}
-                      title="Próximamente"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
-                      onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
-                      onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
-                      </svg>
-                    </button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {/* Editar cine */}
+                      <button
+                        onClick={e => { e.stopPropagation(); setCineEditando(cine); setModalCine('editar') }}
+                        title="Editar cine"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#1C2566'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
+                      {/* Eliminar cine */}
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmarElim({ tipo: 'cine', item: cine }) }}
+                        title="Desactivar cine"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: '#6B7280', marginTop: 5 }}>
@@ -540,14 +653,23 @@ export default function CinesYSalas() {
         />
       )}
 
+      {modalCine && (
+        <ModalCine
+          modo={modalCine}
+          cineInicial={modalCine === 'editar' ? cineEditando : null}
+          onClose={() => { setModalCine(null); setCineEditando(null) }}
+          onGuardado={handleGuardadoCine}
+        />
+      )}
+
       {confirmarElim && (
         <ModalConfirmar
           mensaje={
             confirmarElim.tipo === 'sala'
               ? `¿Eliminar "${confirmarElim.item.nombre}"? Esta acción no se puede deshacer.`
-              : `¿Eliminar el cine "${confirmarElim.item.nombre}"? Esta acción no se puede deshacer.`
+              : `¿Desactivar el cine "${confirmarElim.item.nombre}"? Dejará de aparecer en el sistema.`
           }
-          onConfirmar={handleEliminarSala}
+          onConfirmar={handleConfirmarElim}
           onCancelar={() => setConfirmarElim(null)}
           loading={loadingElim}
         />
