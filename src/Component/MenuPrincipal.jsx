@@ -114,19 +114,6 @@ const CSS = `
   transition: background 0.15s ease, color 0.15s ease; outline: none;
 }
 .sb-help:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); }
-.sb-user {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; background: rgba(255,255,255,0.08);
-  border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); margin-top: 2px;
-}
-.sb-avatar {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: linear-gradient(135deg, #FFB300 0%, #FF8F00 100%);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: #1C2566; flex-shrink: 0; letter-spacing: 0.5px;
-}
-.sb-user-name { font-size: 13px; font-weight: 600; color: #fff; letter-spacing: 0.01em; }
-.sb-user-role { font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 1px; }
 `
 
 export default function MenuPrincipal({ activeIndex, onNavigate }) {
@@ -161,19 +148,12 @@ export default function MenuPrincipal({ activeIndex, onNavigate }) {
         </nav>
 
         <div className="sb-footer">
-          <button className="sb-help">
+          <button className="sb-help" onClick={() => setActive(8)}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <Icon name="help" />
             </span>
             <span>Ayuda y Soporte</span>
           </button>
-          <div className="sb-user">
-            <div className="sb-avatar">EF</div>
-            <div style={{ minWidth: 0 }}>
-              <div className="sb-user-name">Elena Franci</div>
-              <div className="sb-user-role">Administradora</div>
-            </div>
-          </div>
         </div>
 
       </div>

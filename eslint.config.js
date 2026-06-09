@@ -51,6 +51,7 @@ export default [
 
       "no-unused-vars": "off",
       "no-undef": "off",
+      "no-empty": ["warn", { "allowEmptyCatch": true }],
       "react-hooks/set-state-in-effect": "off",
     },
   },
