@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 const CINEMAS_BASE      = '/api/cinemas'       // GET compartido (solo lectura)
 const CINEMAS_ADMIN_BASE = '/api/admin/cinemas' // POST / PUT / DELETE
 const ROOMS_BASE         = '/api/admin/rooms'   // CRUD completo admin
+const SEATS_BASE         = '/api/admin/seats'   // CRUD completo admin de asientos
 
 async function apiFetch(url, opts = {}) {
   const res = await fetch(url, {
@@ -21,15 +22,24 @@ async function apiFetch(url, opts = {}) {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function generarAsientos(capacidad) {
-  const total = Math.min(capacidad, 120)
-  const cols  = Math.min(Math.ceil(Math.sqrt(total * 1.6)), 16)
+  const total = Math.min(capacidad, 300)
+  const cols = Math.min(Math.ceil(Math.sqrt(total * 1.6)), 16)
   const filas = Math.ceil(total / cols)
-  return Array.from({ length: filas }, (_, f) =>
-    Array.from({ length: cols }, (_, c) => {
+  const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+  return Array.from({ length: filas }, (_, f) => {
+    const letra = letras[f] ?? `A${f}`
+    return Array.from({ length: cols }, (_, c) => {
       const idx = f * cols + c
-      return idx < total ? 'asiento' : 'vacio'
+      if (idx >= total) return { tipo: 'vacio' }
+      return {
+        tipo: 'asiento',
+        fila: letra,
+        columna: c + 1,
+        codigo: `${letra}${c + 1}`,
+      }
     })
-  )
+  })
 }
 
 // ─── MAPA DE ASIENTOS ────────────────────────────────────────────────────────
@@ -93,9 +103,35 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
     if (!nombre.trim() || !capacidad) { setError('Completa todos los campos.'); return }
     setLoading(true); setError(null)
     try {
-      const body = { id_cine: idCine, nombre_sala: nombre.trim(), tipo_sala: tipoSala, tipo_formato: tipoFormato, capacidad_asientos: Number(capacidad) }
+      const body = {
+        id_cine:            idCine,
+        nombre_sala:        nombre.trim(),
+        tipo_sala:          tipoSala,
+        tipo_formato:       tipoFormato,
+        capacidad_asientos: Number(capacidad),
+      }
       if (modo === 'crear') {
-        await apiFetch(`${ROOMS_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
+        // Crear sala y generar asientos con el mismo layout que se muestra en la vista previa
+        const sala = await apiFetch(`${ROOMS_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
+        const asientoPreview = generarAsientos(Number(capacidad))
+        const asientos = asientoPreview
+          .flat()
+          .filter(a => a.tipo === 'asiento')
+          .map(a => ({
+            id_sala: sala.id_sala,
+            fila: a.fila,
+            columna: a.columna,
+            tipo_asiento: 'Regular',
+          }))
+
+        if (asientos.length !== Number(capacidad)) {
+          throw new Error(`Error de generación: se esperaban ${capacidad} asientos, pero se generaron ${asientos.length}`)
+        }
+
+        await apiFetch(`${SEATS_BASE}/room/${sala.id_sala}/bulk`, {
+          method: 'POST',
+          body: JSON.stringify(asientos),
+        })
       } else {
         await apiFetch(`${ROOMS_BASE}/${salaInicial.id_sala}`, { method: 'PUT', body: JSON.stringify(body) })
       }
@@ -168,16 +204,25 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
 
 // ─── MODAL AGREGAR / EDITAR CINE ─────────────────────────────────────────────
 function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
-  const [nombreCine, setNombreCine] = useState(cineInicial?.nombre_cine ?? '')
-  const [direccion,  setDireccion]  = useState(cineInicial?.direccion  ?? '')
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState(null)
+  const [nombreCine,       setNombreCine]       = useState(cineInicial?.nombre_cine        ?? '')
+  const [direccion,        setDireccion]        = useState(cineInicial?.direccion          ?? '')
+  const [horariosApertura, setHorariosApertura] = useState(cineInicial?.horarios_apertura  ?? '')
+  const [urlMapa,          setUrlMapa]          = useState(cineInicial?.url_mapa_embebido  ?? '')
+  const [observaciones,    setObservaciones]    = useState(cineInicial?.observaciones      ?? '')
+  const [loading,          setLoading]          = useState(false)
+  const [error,            setError]            = useState(null)
 
   const handleGuardar = async () => {
-    if (!nombreCine.trim() || !direccion.trim()) { setError('Completa todos los campos.'); return }
+    if (!nombreCine.trim() || !direccion.trim()) { setError('Completa los campos obligatorios.'); return }
     setLoading(true); setError(null)
     try {
-      const body = { nombre_cine: nombreCine.trim(), direccion: direccion.trim() }
+      const body = {
+        nombre_cine:       nombreCine.trim(),
+        direccion:         direccion.trim(),
+        horarios_apertura: horariosApertura.trim() || null,
+        url_mapa_embebido: urlMapa.trim() || null,
+        observaciones:     observaciones.trim() || null,
+      }
       if (modo === 'crear') {
         await apiFetch(`${CINEMAS_ADMIN_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
       } else {
@@ -194,8 +239,9 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
     }}>
       <div style={{
-        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 460,
+        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520,
         padding: '28px 32px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+        maxHeight: '90vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: '#121212', margin: 0 }}>
@@ -204,14 +250,28 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9CA3AF', lineHeight: 1 }}>×</button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Field label="Nombre del cine">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field label="Nombre del cine *">
             <input value={nombreCine} onChange={e => setNombreCine(e.target.value)}
               placeholder="Ej. Filmate Centro" style={inputStyle} />
           </Field>
-          <Field label="Dirección">
+          <Field label="Dirección *">
             <input value={direccion} onChange={e => setDireccion(e.target.value)}
-              placeholder="Ej. Av. Larco 123" style={inputStyle} />
+              placeholder="Ej. Av. Javier Prado Este 5400" style={inputStyle} />
+          </Field>
+          <Field label="Horarios de apertura">
+            <input value={horariosApertura} onChange={e => setHorariosApertura(e.target.value)}
+              placeholder="Ej. Lunes a Domingo: 1:00 PM – 11:00 PM" style={inputStyle} />
+          </Field>
+          <Field label="URL del mapa embebido">
+            <input value={urlMapa} onChange={e => setUrlMapa(e.target.value)}
+              placeholder="https://www.google.com/maps/embed?..." style={inputStyle} />
+          </Field>
+          <Field label="Observaciones">
+            <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
+              placeholder="Información adicional sobre el cine..."
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical' }} />
           </Field>
         </div>
 
