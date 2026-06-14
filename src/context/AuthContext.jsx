@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
@@ -14,6 +14,7 @@ export function AuthProvider({ children }) {
     }
   })
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(true)
 
   const login = useCallback(async (correo, contrasena) => {
     setLoading(true)
@@ -42,8 +43,26 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
+  useEffect(() => {
+    if (!user) {
+      setVerifying(false)
+      return
+    }
+    fetch('/api/admin/rooms/?limit=1', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Sesión inválida')
+      })
+      .catch(() => {
+        localStorage.removeItem(USER_KEY)
+        setUser(null)
+      })
+      .finally(() => setVerifying(false))
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, verifying }}>
       {children}
     </AuthContext.Provider>
   )

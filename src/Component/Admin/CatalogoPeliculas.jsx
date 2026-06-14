@@ -342,7 +342,21 @@ function PeliculaForm({
   const [showDiscard, setShowDiscard] = useState(false)
 
   useEffect(() => {
-    if (initial) setForm(initForm())
+    if (!initial) return
+    setForm({
+      titulo:         initial.titulo         || '',
+      sinopsis:       initial.sinopsis       || '',
+      duracion:       initial.duracion_minutos ? String(initial.duracion_minutos) : (initial.duracion || ''),
+      clasificacion:  initial.clasificacion  || '',
+      poster:         initial.poster         || '',
+      trailer:        initial.trailer        || '',
+      banner:         initial.banner         || '',
+      anio_lanzamiento: initial.anio_lanzamiento || '',
+      generos:        initial.generos        || [],
+      estado:         initial.estado         || 'ACTIVO',
+      director:       initial.director       || '',
+      elenco:         initial.elenco         || '',
+    })
   }, [initial])
 
   const set = (k, v) => {

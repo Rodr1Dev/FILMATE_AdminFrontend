@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import MenuPrincipal from './MenuPrincipal.jsx'
 import Header from './Header.jsx'
+import DashboardPrincipal from './Admin/DashboardPrincipal.jsx'
 import VentasYTickets from './Admin/VentasYTickets.jsx'
 import CatalogoPeliculas from './Admin/CatalogoPeliculas.jsx'
 import CinesYSalas from './Admin/CinesYSalas.jsx'
@@ -19,13 +20,14 @@ function PlaceholderView({ nombre }) {
 }
 
 export default function MainLayout() {
-  const [activeIndex, setActiveIndex] = useState(5)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [detailTxnId, setDetailTxnId] = useState(null)
 
   function renderView() {
     switch (activeIndex) {
       case 2: return <CatalogoPeliculas />
-      case 5: return <VentasYTickets />
-      case 0: return <PlaceholderView nombre="Dashboard Principal" />
+      case 5: return <VentasYTickets initialTxnId={detailTxnId} />
+      case 0: return <DashboardPrincipal onNavigate={setActiveIndex} onViewTransaction={(id) => { setDetailTxnId(id); setActiveIndex(5) }} />
       case 1: return <PlaceholderView nombre="Reportes" />
       case 3: return <CinesYSalas />
       case 4: return <PlaceholderView nombre="Programación" />
