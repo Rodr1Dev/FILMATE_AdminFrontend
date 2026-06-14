@@ -5,7 +5,8 @@ import MainLayout from './Component/MainLayout.jsx'
 import LoginPage from './Component/LoginPage.jsx'
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth()
+  const { user, verifying } = useAuth()
+  if (verifying) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#666' }}>Verificando sesión...</div>
   if (!user) return <Navigate to="/login" replace />
   return children
 }
@@ -22,7 +23,7 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>

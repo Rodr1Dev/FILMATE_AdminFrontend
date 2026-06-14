@@ -117,7 +117,7 @@ const CSS = `
 `
 
 export default function MenuPrincipal({ activeIndex, onNavigate }) {
-  const [localActive, setLocalActive] = useState(5)
+  const [localActive, setLocalActive] = useState(0)
   const active = activeIndex !== undefined ? activeIndex : localActive
   const setActive = onNavigate || setLocalActive
 

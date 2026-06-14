@@ -11,6 +11,10 @@ const FAQS = [
     a: 'Ve a "Ventas y Tickets" > "Validación de Entradas". Escanea el código QR del ticket o pega el código en el campo de texto.' },
   { q: '¿Qué hago si el sistema no carga?',
     a: 'Verifica que el backend esté corriendo en localhost:8000. Revisa la consola del navegador (F12) para errores. Si el problema persiste, contacta a soporte técnico.' },
+  { q: '¿Los datos del Dashboard son en tiempo real?',
+    a: 'Sí, los datos se obtienen directamente del API al cargar la página. Los filtros de período, estado, sala y búsqueda se aplican del lado del cliente para una respuesta inmediata sin recargar.' },
+  { q: '¿Cómo funciona el filtro de período en Dashboard?',
+    a: 'Al seleccionar Hoy, Últimos 7 días, Este mes o Mes anterior, las tarjetas de resumen (boletos, ingresos, película taquillera) y los gráficos se recalculan automáticamente con las transacciones de ese período. La tabla de últimas transacciones también se filtra por el período elegido.' },
 ]
 
 function Section({ title, icon, children }) {
@@ -62,7 +66,7 @@ export default function AyudaSoporte() {
         <Section title="Módulos del Sistema" icon="📋">
           <div style={{ display: 'grid', gap: 8 }}>
             {[
-              { mod: 'Dashboard Principal', desc: 'Resumen ejecutivo con métricas clave del negocio.' },
+              { mod: 'Dashboard Principal', desc: 'Resumen ejecutivo con datos en tiempo real del API: tarjetas de boletos vendidos, ingresos, película taquillera y gráficos (ventas semanales por día e ingresos por tipo de sala). Incluye filtro por período (Hoy/7 días/Este mes/Mes anterior) que actualiza tarjetas y gráficos. Tabla de últimas 10 transacciones con búsqueda instantánea en todas las columnas y filtros por estado/sala. "Ver detalle" abre la transacción en Ventas y Tickets.' },
               { mod: 'Reportes', desc: 'Reportes detallados de ventas, ingresos y rendimiento.' },
               { mod: 'Catálogo de Películas', desc: 'Gestión completa del catálogo: alta, edición y baja de películas.' },
               { mod: 'Cines y Salas', desc: 'Administración de complejos, salas y configuración de asientos.' },
@@ -82,11 +86,11 @@ export default function AyudaSoporte() {
         <Section title="Atajos y Tips" icon="⚡">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
-              { label: 'Filtros rápidos', tip: 'Usa los filtros de estado, tipo y fecha en cada sección para acotar resultados.' },
-              { label: 'Búsqueda global', tip: 'El campo de búsqueda en Ventas y Tickets busca por ID, cliente o película.' },
-              { label: 'Descarga PDF', tip: 'Cada transacción tiene un botón "Descargar PDF" con el comprobante oficial y QR.' },
-              { label: 'Paginación', tip: 'Los listados usan paginación de 10 registros. Usa las flechas para navegar.' },
-              { label: 'Persistencia local', tip: 'El log de validación QR persiste en el navegador incluso al recargar.' },
+              { label: 'Filtros instantáneos', tip: 'Los filtros en Dashboard y Ventas aplican automáticamente al seleccionar —sin botón "Aplicar".' },
+              { label: 'Búsqueda global', tip: 'En Dashboard la búsqueda filtra por ID, fecha, cliente, película, sala, monto y estado en todas las columnas visibles.' },
+              { label: 'Período en Dashboard', tip: 'El selector de período (Hoy/7 días/Este mes/Mes anterior) recalcula tarjetas de resumen y gráficos automáticamente.' },
+              { label: 'Ver detalle', tip: 'El botón "Ver detalle" en la tabla del Dashboard abre la transacción directamente en Ventas y Tickets.' },
+              { label: 'Limpiar filtros', tip: 'El botón "Limpiar filtros" en Dashboard resetea búsqueda, estado y sala de un solo clic.' },
             ].map(s => (
               <div key={s.label}>
                 <span style={{ fontWeight: 600, fontSize: 13, color: '#121212' }}>{s.label}</span>
@@ -123,7 +127,7 @@ export default function AyudaSoporte() {
 
       <div style={{ marginTop: 32, padding: '16px 20px', background: '#F9FAFB', borderRadius: 10, border: '1px solid #E5E7EB' }}>
         <p style={{ margin: 0, fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
-          Panel Administrativo Filmate v0.2.0 · API conectada a localhost:8000 · {new Date().getFullYear()}
+          Panel Administrativo Filmate v0.3.0 · API conectada a localhost:8000 · {new Date().getFullYear()}
         </p>
       </div>
       </div>
