@@ -4,6 +4,7 @@ import Header from './Header.jsx'
 import DashboardPrincipal from './Admin/DashboardPrincipal.jsx'
 import VentasYTickets from './Admin/VentasYTickets.jsx'
 import CatalogoPeliculas from './Admin/CatalogoPeliculas.jsx'
+import Programacion from './Admin/Programacion.jsx'
 import CinesYSalas from './Admin/CinesYSalas.jsx'
 import AyudaSoporte from './Admin/AyudaSoporte.jsx'
 
@@ -30,7 +31,7 @@ export default function MainLayout() {
       case 0: return <DashboardPrincipal onNavigate={setActiveIndex} onViewTransaction={(id) => { setDetailTxnId(id); setActiveIndex(5) }} />
       case 1: return <PlaceholderView nombre="Reportes" />
       case 3: return <CinesYSalas />
-      case 4: return <PlaceholderView nombre="Programación" />
+      case 4: return <Programacion />
       case 6: return <PlaceholderView nombre="Usuarios y Roles" />
       case 7: return <PlaceholderView nombre="Configuración y Precios" />
       case 8: return <AyudaSoporte />
