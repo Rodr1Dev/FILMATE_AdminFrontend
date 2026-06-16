@@ -1224,10 +1224,17 @@ const TABS = [
   'Validación de Entradas',
 ]
 
-export default function VentasYTickets() {
+export default function VentasYTickets({ initialTxnId }) {
   const [tabActiva,             setTabActiva]             = useState(0)
   const [selectedTransactionId, setSelectedTransactionId] = useState(null)
   const [computedTotals,        setComputedTotals]        = useState({})
+
+  useEffect(() => {
+    if (initialTxnId) {
+      setSelectedTransactionId(initialTxnId)
+      setTabActiva(1)
+    }
+  }, [])
 
   const handleSelectTransaction = (id) => {
     setSelectedTransactionId(id)
