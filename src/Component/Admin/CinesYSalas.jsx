@@ -202,24 +202,77 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
   )
 }
 
+// ─── Helpers de horario (días + horas → string "Lunes a Domingo: 10:00AM - 10:00PM") ──
+const DIAS_SEMANA_CINE = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+function parseHorarioInicial(str) {
+  if (!str) return { horaApertura: '10:00', horaCierre: '22:00', dias: [...DIAS_SEMANA_CINE] }
+  const match = str.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!match) return { horaApertura: '10:00', horaCierre: '22:00', dias: [...DIAS_SEMANA_CINE] }
+  const to24 = (h, m, ampm) => {
+    let hh = Number(h)
+    if (/pm/i.test(ampm) && hh !== 12) hh += 12
+    if (/am/i.test(ampm) && hh === 12) hh = 0
+    return `${String(hh).padStart(2, '0')}:${m}`
+  }
+  return {
+    horaApertura: to24(match[1], match[2], match[3]),
+    horaCierre:   to24(match[4], match[5], match[6]),
+    dias: [...DIAS_SEMANA_CINE],
+  }
+}
+
+function formatHora12(hora24) {
+  const [h, m] = hora24.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  let hh = h % 12
+  if (hh === 0) hh = 12
+  return `${hh}:${String(m).padStart(2, '0')}${ampm}`
+}
+
+function construirStringHorario(dias, horaApertura, horaCierre) {
+  if (dias.length === 0) return ''
+  const idxs = dias.map(d => DIAS_SEMANA_CINE.indexOf(d)).sort((a, b) => a - b)
+  const esRangoCompleto = dias.length === 7
+  const esConsecutivo = idxs.every((v, i) => i === 0 || v === idxs[i - 1] + 1)
+  let etiquetaDias
+  if (esRangoCompleto) {
+    etiquetaDias = 'Lunes a Domingo'
+  } else if (esConsecutivo && dias.length > 1) {
+    etiquetaDias = `${DIAS_SEMANA_CINE[idxs[0]]} a ${DIAS_SEMANA_CINE[idxs[idxs.length - 1]]}`
+  } else {
+    etiquetaDias = idxs.map(i => DIAS_SEMANA_CINE[i]).join(', ')
+  }
+  return `${etiquetaDias}: ${formatHora12(horaApertura)} - ${formatHora12(horaCierre)}`
+}
+
 // ─── MODAL AGREGAR / EDITAR CINE ─────────────────────────────────────────────
 function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
   const [nombreCine,       setNombreCine]       = useState(cineInicial?.nombre_cine        ?? '')
   const [direccion,        setDireccion]        = useState(cineInicial?.direccion          ?? '')
-  const [horariosApertura, setHorariosApertura] = useState(cineInicial?.horarios_apertura  ?? '')
+  const horarioInicial = parseHorarioInicial(cineInicial?.horarios_apertura)
+  const [diasSeleccionados, setDiasSeleccionados] = useState(horarioInicial.dias)
+  const [horaApertura,     setHoraApertura]     = useState(horarioInicial.horaApertura)
+  const [horaCierre,       setHoraCierre]       = useState(horarioInicial.horaCierre)
   const [urlMapa,          setUrlMapa]          = useState(cineInicial?.url_mapa_embebido  ?? '')
   const [observaciones,    setObservaciones]    = useState(cineInicial?.observaciones      ?? '')
   const [loading,          setLoading]          = useState(false)
   const [error,            setError]            = useState(null)
 
+  const toggleDia = (dia) => setDiasSeleccionados(prev =>
+    prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia]
+  )
+
   const handleGuardar = async () => {
     if (!nombreCine.trim() || !direccion.trim()) { setError('Completa los campos obligatorios.'); return }
+    if (diasSeleccionados.length === 0) { setError('Selecciona al menos un día de atención.'); return }
     setLoading(true); setError(null)
     try {
+      const horariosApertura = construirStringHorario(diasSeleccionados, horaApertura, horaCierre)
       const body = {
         nombre_cine:       nombreCine.trim(),
         direccion:         direccion.trim(),
-        horarios_apertura: horariosApertura.trim() || null,
+        horarios_apertura: horariosApertura || null,
         url_mapa_embebido: urlMapa.trim() || null,
         observaciones:     observaciones.trim() || null,
       }
@@ -259,10 +312,46 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
             <input value={direccion} onChange={e => setDireccion(e.target.value)}
               placeholder="Ej. Av. Javier Prado Este 5400" style={inputStyle} />
           </Field>
-          <Field label="Horarios de apertura">
-            <input value={horariosApertura} onChange={e => setHorariosApertura(e.target.value)}
-              placeholder="Ej. Lunes a Domingo: 1:00 PM – 11:00 PM" style={inputStyle} />
+
+          <Field label="Días de atención *">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {DIAS_SEMANA_CINE.map(dia => {
+                const sel = diasSeleccionados.includes(dia)
+                return (
+                  <button
+                    key={dia}
+                    type="button"
+                    onClick={() => toggleDia(dia)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      border: `1.5px solid ${sel ? '#1C2566' : '#D1D5DC'}`,
+                      background: sel ? '#1C2566' : '#fff',
+                      color: sel ? '#fff' : '#4A5565',
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    {dia.slice(0, 3)}
+                  </button>
+                )
+              })}
+            </div>
           </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Hora de apertura *">
+              <input type="time" value={horaApertura} onChange={e => setHoraApertura(e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label="Hora de cierre *">
+              <input type="time" value={horaCierre} onChange={e => setHoraCierre(e.target.value)} style={inputStyle} />
+            </Field>
+          </div>
+
+          {diasSeleccionados.length > 0 && (
+            <div style={{ fontSize: 12, color: '#6B7280', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px' }}>
+              Vista previa: <strong style={{ color: '#1C2566' }}>{construirStringHorario(diasSeleccionados, horaApertura, horaCierre)}</strong>
+            </div>
+          )}
+
           <Field label="URL del mapa embebido">
             <input value={urlMapa} onChange={e => setUrlMapa(e.target.value)}
               placeholder="https://www.google.com/maps/embed?..." style={inputStyle} />
