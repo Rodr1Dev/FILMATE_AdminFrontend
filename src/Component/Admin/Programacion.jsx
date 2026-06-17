@@ -82,6 +82,62 @@ function formatFechaHora(fechaHora) {
   return d.toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
+// ─── Parseo de "horarios_apertura" del cine, ej: "Lunes a Domingo: 10:00AM - 10:00PM" ──
+const DIAS_SEMANA_FULL = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'] // índice = Date.getDay()
+
+function parseHorarioCine(horariosApertura) {
+  if (!horariosApertura) return null
+  const matchHoras = horariosApertura.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!matchHoras) return null
+  const to24 = (h, m, ampm) => {
+    let hh = Number(h)
+    if (/pm/i.test(ampm) && hh !== 12) hh += 12
+    if (/am/i.test(ampm) && hh === 12) hh = 0
+    return hh * 60 + Number(m) // minutos desde medianoche
+  }
+  const minutosApertura = to24(matchHoras[1], matchHoras[2], matchHoras[3])
+  const minutosCierre   = to24(matchHoras[4], matchHoras[5], matchHoras[6])
+
+  // Días: buscamos nombres de día textuales antes de los dos puntos
+  const ORDEN_DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+  const partePrevia = horariosApertura.split(':').slice(0, -2).join(':') // texto antes de la hora
+  let diasActivos
+  const matchRango = partePrevia.match(/(Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)\s*a\s*(Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)/i)
+  if (matchRango) {
+    const i1 = ORDEN_DIAS.findIndex(d => d.toLowerCase() === matchRango[1].toLowerCase())
+    const i2 = ORDEN_DIAS.findIndex(d => d.toLowerCase() === matchRango[2].toLowerCase())
+    diasActivos = ORDEN_DIAS.slice(i1, i2 + 1)
+  } else {
+    diasActivos = ORDEN_DIAS.filter(d => partePrevia.toLowerCase().includes(d.toLowerCase()))
+  }
+  if (diasActivos.length === 0) diasActivos = [...ORDEN_DIAS] // si no se reconoce, no restringir por día
+
+  return { minutosApertura, minutosCierre, diasActivos }
+}
+
+function validarDentroHorarioCine(fechaHoraISO, duracionMin, horariosApertura) {
+  const horario = parseHorarioCine(horariosApertura)
+  if (!horario) return { valido: true } // sin info de horario, no se puede validar -> se permite
+  const d = new Date(fechaHoraISO)
+  const diaNombre = DIAS_SEMANA_FULL[d.getDay()]
+  if (!horario.diasActivos.includes(diaNombre)) {
+    return { valido: false, motivo: `El cine no atiende los días ${diaNombre}.` }
+  }
+  const minutosInicio = d.getHours() * 60 + d.getMinutes()
+  const minutosFin    = minutosInicio + duracionMin
+  if (minutosInicio < horario.minutosApertura || minutosFin > horario.minutosCierre) {
+    const fmt = (min) => {
+      let hh = Math.floor(min / 60) % 24
+      const mm = min % 60
+      const ampm = hh >= 12 ? 'PM' : 'AM'
+      let h12 = hh % 12; if (h12 === 0) h12 = 12
+      return `${h12}:${String(mm).padStart(2, '0')}${ampm}`
+    }
+    return { valido: false, motivo: `Fuera del horario de atención (${fmt(horario.minutosApertura)} - ${fmt(horario.minutosCierre)}).` }
+  }
+  return { valido: true }
+}
+
 // ─── MODAL CONFIRMAR ELIMINACIÓN ─────────────────────────────────────────────
 function ModalConfirmar({ mensaje, onConfirmar, onCancelar, loading }) {
   return (
@@ -206,8 +262,17 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
     }) ?? null
   }, [idSala, fechaHora, idPelicula, showtimes, peliculas, salas, cine.id_cine])
 
+  // ── Detectar fuera de horario de atención del cine ──
+  const fueraDeHorario = useMemo(() => {
+    if (!fechaHora || !idPelicula) return null
+    const pelicula = peliculas.find(p => p.id_pelicula === Number(idPelicula))
+    const duracion = pelicula?.duracion_minutos ?? 0
+    const resultado = validarDentroHorarioCine(fechaHora, duracion, cine.horarios_apertura)
+    return resultado.valido ? null : resultado.motivo
+  }, [fechaHora, idPelicula, cine.horarios_apertura])
+
   const camposCompletos = idPelicula && idSala && fechaHora && precio
-  const puedeGuardar    = camposCompletos && !cruce
+  const puedeGuardar    = camposCompletos && !cruce && !fueraDeHorario
 
   const inputError = { ...inputStyle, borderColor: '#EF4444', background: '#FFF1F2' }
 
@@ -280,7 +345,7 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
               type="datetime-local"
               value={fechaHora}
               onChange={e => setFechaHora(e.target.value)}
-              style={cruce ? inputError : inputStyle}
+              style={(cruce || fueraDeHorario) ? inputError : inputStyle}
             />
           </Field>
 
@@ -294,6 +359,13 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
         {cruce && (
           <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF1F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 13, color: '#C2410C' }}>
             ⚠️ Esta función se cruza con <strong>{peliculaCruce}</strong> en la misma sala. Cambia la sala o el horario.
+          </div>
+        )}
+
+        {/* Mensaje de fuera de horario de atención */}
+        {!cruce && fueraDeHorario && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF1F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 13, color: '#C2410C' }}>
+            ⚠️ {fueraDeHorario}
           </div>
         )}
 
