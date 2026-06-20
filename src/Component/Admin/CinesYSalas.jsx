@@ -180,8 +180,14 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
             </Field>
           </div>
           <Field label="Capacidad total de asientos">
-            <input type="number" min="1" value={capacidad} onChange={e => setCapacidad(e.target.value)}
-              placeholder="Ej. 120" style={inputStyle} />
+            <select value={capacidad} onChange={e => setCapacidad(e.target.value)} style={inputStyle}>
+              <option value="">Seleccionar capacidad...</option>
+              <option value="50">50 asientos</option>
+              <option value="100">100 asientos</option>
+              <option value="150">150 asientos</option>
+              <option value="200">200 asientos</option>
+              <option value="250">250 asientos</option>
+            </select>
           </Field>
         </div>
 
@@ -256,6 +262,7 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
   const [horaCierre,       setHoraCierre]       = useState(horarioInicial.horaCierre)
   const [urlMapa,          setUrlMapa]          = useState(cineInicial?.url_mapa_embebido  ?? '')
   const [observaciones,    setObservaciones]    = useState(cineInicial?.observaciones      ?? '')
+  const [estadoCine,       setEstadoCine]       = useState(cineInicial?.estado_cine ?? 'Activo')
   const [loading,          setLoading]          = useState(false)
   const [error,            setError]            = useState(null)
 
@@ -275,6 +282,7 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
         horarios_apertura: horariosApertura || null,
         url_mapa_embebido: urlMapa.trim() || null,
         observaciones:     observaciones.trim() || null,
+        estado_cine:       estadoCine,
       }
       if (modo === 'crear') {
         await apiFetch(`${CINEMAS_ADMIN_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
@@ -300,7 +308,16 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
           <h2 style={{ fontSize: 20, fontWeight: 700, color: '#121212', margin: 0 }}>
             {modo === 'crear' ? 'Agregar Cine' : 'Editar Cine'}
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9CA3AF', lineHeight: 1 }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</label>
+              <select value={estadoCine} onChange={e => setEstadoCine(e.target.value)} style={{ ...inputStyle, padding: '5px 10px', fontSize: 13, width: 'auto' }}>
+                <option value="Activo">Activo</option>
+                <option value="Inactivo">Inactivo</option>
+              </select>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9CA3AF', lineHeight: 1 }}>×</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
