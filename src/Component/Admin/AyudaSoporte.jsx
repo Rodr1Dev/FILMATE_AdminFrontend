@@ -17,9 +17,9 @@ const FAQS = [
     a: 'Al seleccionar Hoy, Últimos 7 días, Este mes o Mes anterior, las tarjetas de resumen (boletos, ingresos, película taquillera) y los gráficos se recalculan automáticamente con las transacciones de ese período. La tabla de últimas transacciones también se filtra por el período elegido.' },
 ]
 
-function Section({ title, icon, children }) {
+function Section({ title, icon, children, style }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 24 }}>
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 24, ...style }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, borderBottom: '1px solid #E5E7EB', paddingBottom: 12 }}>
         <span style={{ fontSize: 20 }}>{icon}</span>
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#121212' }}>{title}</h3>
@@ -53,7 +53,7 @@ export default function AyudaSoporte() {
   const [faqOpen, setFaqOpen] = useState(null)
 
   return (
-    <div style={{ padding: '28px 28px 40px', maxWidth: 960 }}>
+    <div style={{ padding: '28px 28px 40px' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#121212', margin: 0 }}>Ayuda y Soporte</h1>
         <p style={{ fontSize: 14, color: '#6B7280', margin: '5px 0 0' }}>
@@ -61,7 +61,6 @@ export default function AyudaSoporte() {
         </p>
       </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
         <Section title="Módulos del Sistema" icon="📋">
           <div style={{ display: 'grid', gap: 8 }}>
@@ -129,7 +128,6 @@ export default function AyudaSoporte() {
         <p style={{ margin: 0, fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
           Panel Administrativo Filmate v0.3.0 · API conectada a localhost:8000 · {new Date().getFullYear()}
         </p>
-      </div>
       </div>
     </div>
   )
