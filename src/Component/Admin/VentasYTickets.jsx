@@ -209,7 +209,6 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
   const [estado,     setEstado]     = useState('')
   const [fecha,      setFecha]      = useState('')
   const [tipo,       setTipo]       = useState('')
-  const [buscarTemp, setBuscarTemp] = useState('')
   const [buscar,     setBuscar]     = useState('')
   const [page,       setPage]       = useState(1)
   const [data,       setData]       = useState(null)
@@ -231,13 +230,12 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const hayFiltrosActivos = estado || fecha || tipo || buscar || buscarTemp
+  const hayFiltrosActivos = estado || fecha || tipo || buscar
 
   const handleLimpiarFiltros = () => {
     setEstado('')
     setFecha('')
     setTipo('')
-    setBuscarTemp('')
     setBuscar('')
     setPage(1)
   }
@@ -279,8 +277,8 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
           <SearchInput
             label="Buscar"
             placeholder="ID transacción, cliente, película"
-            value={buscarTemp}
-            onChange={setBuscarTemp}
+            value={buscar}
+            onChange={v => { setBuscar(v); setPage(1) }}
           />
           <SelectFilter
             label="Estado"
@@ -303,26 +301,15 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
             options={FECHA_OPTIONS}
             value={fecha} onChange={v => { setFecha(v); setPage(1) }}
           />
-          <button
-            onClick={() => { setBuscar(buscarTemp); setPage(1) }}
-            style={{
-              background: '#283593', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '9px 18px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-            }}>
-            Aplicar filtros
-          </button>
           {hayFiltrosActivos && (
             <button
               onClick={handleLimpiarFiltros}
               style={{
-                background: '#fff', color: '#6B7280',
-                border: '1px solid #D1D5DC', borderRadius: 8,
-                padding: '9px 18px', fontSize: 14, fontWeight: 600,
+                padding: '9px 18px', borderRadius: 10, border: '1px solid #FECACA',
+                background: '#FEF2F2', color: '#EF4444', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              ✕ Limpiar filtros
+              Limpiar
             </button>
           )}
         </div>
@@ -381,8 +368,12 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   const [error,        setError]        = useState(null)
   const [tipoR,        setTipoR]        = useState('Reembolso total')
   const [montoR,       setMontoR]       = useState(montoTotal)
+  const [touched,      setTouched]      = useState(false)
+
+  const motivoError = touched && !motivo.trim()
 
   const handleSubmit = async () => {
+    setTouched(true)
     if (!motivo.trim()) { setError('El motivo es obligatorio'); return }
     setSaving(true); setError(null)
     try {
@@ -409,25 +400,27 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Motivo *</label>
-          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3}
-            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+          <textarea value={motivo} onChange={e => { setMotivo(e.target.value); if (touched) setTouched(false); if (error === 'El motivo es obligatorio') setError(null) }} rows={3}
+            style={{ width: '100%', border: motivoError ? '1px solid #EF4444' : '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
             placeholder="Describa el motivo del reembolso..." />
+          {motivoError && <p style={{ margin: '4px 0 0', fontSize: 12, color: '#EF4444' }}>Campo obligatorio</p>}
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Tipo de reembolso *</label>
-          <select value={tipoR} onChange={e => { setTipoR(e.target.value); if (e.target.value === 'Sin reembolso') setMontoR(0) }}
+          <select value={tipoR} onChange={e => { setTipoR(e.target.value); if (e.target.value === 'Reembolso total') setMontoR(montoTotal) }}
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
             <option value="Reembolso total">Reembolso total</option>
             <option value="Reembolso parcial">Reembolso parcial</option>
-            <option value="Sin reembolso">Sin reembolso</option>
           </select>
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Monto a reembolsar *</label>
-          <input type="number" step="0.01" value={montoR} onChange={e => setMontoR(e.target.value)}
-            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          <input type="number" step="0.01" value={montoR}
+            disabled={tipoR === 'Reembolso total'}
+            onChange={e => setMontoR(e.target.value)}
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box', background: tipoR === 'Reembolso total' ? '#F3F4F6' : '#fff', cursor: tipoR === 'Reembolso total' ? 'not-allowed' : 'text' }} />
         </div>
 
         {error && (
@@ -438,7 +431,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button onClick={onClose} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving || !motivo.trim()}
+          <button onClick={handleSubmit} disabled={saving}
             style={{ padding: '8px 24px', border: 'none', borderRadius: 8, background: saving ? '#9CA3AF' : '#C2410C', color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
             {saving ? 'Enviando…' : 'Solicitar Reembolso'}
           </button>
@@ -787,11 +780,9 @@ const SOLICITUD_ESTADOS = [
 function TabDevoluciones() {
   const [estadoFiltro, setEstadoFiltro] = useState('')
   const [fecha,        setFecha]        = useState('')
-  const [buscarTemp,   setBuscarTemp]   = useState('')
   const [buscar,       setBuscar]       = useState('')
   const [page,         setPage]         = useState(1)
   const [data,         setData]         = useState(null)
-  const [metrics,      setMetrics]      = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
   const [resolveTarget, setResolveTarget] = useState(null)
@@ -804,12 +795,8 @@ function TabDevoluciones() {
     setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ page: 1, limit: 100 })
-      const [sols, met] = await Promise.all([
-        apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`),
-        apiFetch(`${ADMIN_REEMBOLSOS}/metricas`).catch(() => ({})),
-      ])
+      const sols = await apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`)
       setData(sols || [])
-      setMetrics(met || {})
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [refreshKey])
@@ -822,7 +809,6 @@ function TabDevoluciones() {
   const handleLimpiarFiltros = () => {
     setEstadoFiltro('')
     setFecha('')
-    setBuscarTemp('')
     setBuscar('')
     setPage(1)
   }
@@ -847,11 +833,17 @@ function TabDevoluciones() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
   const paginated = filtered.slice((page - 1) * 10, page * 10)
 
+  const localEval  = allSolicitudes.filter(s => s.estado_solicitud === 'Evaluacion').length
+  const localAprob = allSolicitudes.filter(s => s.estado_solicitud === 'Aprobada').length
+  const localMonto = allSolicitudes
+    .filter(s => s.estado_solicitud === 'Aprobada')
+    .reduce((sum, s) => sum + parseFloat(s.monto_reembolsado || 0), 0)
+
   const metricCards = [
     { label: 'Solicitudes Totales', value: allSolicitudes.length,             sub: 'Todas las solicitudes', iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
-    { label: 'Evaluacion',          value: metrics?.evaluacion ?? '—',        sub: 'Requieren revisión',    iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
-    { label: 'Aprobadas',           value: metrics?.aprobadas ?? '—',         sub: 'Reembolso procesado',   iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
-    { label: 'Monto Devuelto',      value: metrics?.monto_total_aprobado != null ? fmtMoney(metrics.monto_total_aprobado) : '—', sub: 'Total aprobado', iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
+    { label: 'Evaluacion',          value: localEval,                         sub: 'Requieren revisión',    iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
+    { label: 'Aprobadas',           value: localAprob,                        sub: 'Reembolso procesado',   iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
+    { label: 'Monto Devuelto',      value: localMonto > 0 ? fmtMoney(localMonto) : '—', sub: 'Total aprobado', iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
   ]
 
   return (
@@ -921,8 +913,8 @@ function TabDevoluciones() {
           <SearchInput
             label="Buscar"
             placeholder="#ID, transacción, motivo"
-            value={buscarTemp}
-            onChange={setBuscarTemp}
+            value={buscar}
+            onChange={v => { setBuscar(v); setPage(1) }}
           />
           <SelectFilter
             label="Estado"
@@ -934,26 +926,15 @@ function TabDevoluciones() {
             options={FECHA_OPTIONS}
             value={fecha} onChange={v => { setFecha(v); setPage(1) }}
           />
-          <button
-            onClick={() => { setBuscar(buscarTemp); setPage(1) }}
-            style={{
-              background: '#283593', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '9px 18px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-            }}>
-            Aplicar filtros
-          </button>
           {hayFiltrosActivos && (
             <button
               onClick={handleLimpiarFiltros}
               style={{
-                background: '#fff', color: '#6B7280',
-                border: '1px solid #D1D5DC', borderRadius: 8,
-                padding: '9px 18px', fontSize: 14, fontWeight: 600,
+                padding: '9px 18px', borderRadius: 10, border: '1px solid #FECACA',
+                background: '#FEF2F2', color: '#EF4444', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              ✕ Limpiar filtros
+              Limpiar
             </button>
           )}
         </div>

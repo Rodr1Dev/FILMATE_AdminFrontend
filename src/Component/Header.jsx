@@ -27,7 +27,7 @@ export default function Header() {
     ? user.nombre.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     : '??'
 
-  const roleLabel = user?.roles === 1 ? 'Administrador' : 'Usuario'
+  const roleLabel = user?.roles?.includes(1) ? 'Administrador' : 'Usuario'
 
   useEffect(() => {
     function handleClick(e) {

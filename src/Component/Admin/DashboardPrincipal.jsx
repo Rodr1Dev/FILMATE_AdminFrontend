@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import {
   Film,
   Ticket,
@@ -11,6 +11,7 @@ import {
   Minus,
   Search,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react"
 import {
   ResponsiveContainer,
@@ -28,6 +29,8 @@ const DASHBOARD_BASE    = '/api/admin/dashboard'
 const TRANSACTIONS_BASE = '/api/admin/transactions'
 const REEMBOLSOS_BASE   = '/api/admin/reembolsos'
 const ROOMS_BASE        = '/api/admin/rooms'
+const SHOWTIMES_BASE    = '/api/admin/showtimes'
+const CINEMAS_BASE      = '/api/cinemas'
 
 async function apiFetch(url, opts = {}) {
   const res = await fetch(url, {
@@ -61,12 +64,23 @@ function formatBadge(value) {
   return `${sign}${Number(value).toFixed(1)}%`
 }
 
-const PERIOD_MAP = {
-  'Hoy':               { days: 0 },
-  'Últimos 7 días':    { days: 7 },
-  'Este mes':          { days: 30 },
-  'Mes anterior':      { days: -1 },
+function formatOccupancy(value) {
+  if (value == null) return '0%'
+  const num = Number(value)
+  if (num < 1) return `${num.toFixed(2)}%`
+  return `${Math.round(num)}%`
 }
+
+const PERIOD_MAP = {
+  'Hoy':               { days: 0, api: 'hoy' },
+  'Últimos 7 días':    { days: 7, api: 'semana' },
+  'Este mes':          { days: 30, api: 'mes' },
+  'Mes anterior':      { days: -1, api: 'mes_anterior' },
+}
+
+const DASHBOARD_CSS = `
+@keyframes spin { to { transform: rotate(360deg); } }
+`
 
 export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   const [period, setPeriod] = useState("Este mes")
@@ -80,29 +94,60 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   const [ventasMes, setVentasMes] = useState(0)
   const [pendientes, setPendientes] = useState(0)
   const [salas, setSalas] = useState([])
+  const [cineMap, setCineMap] = useState({})
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const intervalRef = useRef(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (isAutoRefresh = false) => {
+    if (isAutoRefresh) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
     try {
-      const [dash, txData, reembData, roomsData] = await Promise.all([
-        apiFetch(`${DASHBOARD_BASE}/`),
-        apiFetch(`${TRANSACTIONS_BASE}/?page=1&limit=50`),
+      const periodoApi = PERIOD_MAP[period]?.api ?? 'mes'
+      const [dash, txData, reembData, roomsData, showtimes, cinemasData] = await Promise.all([
+        apiFetch(`${DASHBOARD_BASE}/?periodo=${periodoApi}`),
+        apiFetch(`${TRANSACTIONS_BASE}/?page=1&limit=500`),
         apiFetch(`${REEMBOLSOS_BASE}/metricas`).catch(() => ({ pendientes: 0 })),
         apiFetch(`${ROOMS_BASE}/`).catch(() => []),
+        apiFetch(`${SHOWTIMES_BASE}/`).catch(() => []),
+        apiFetch(`${CINEMAS_BASE}/`).catch(() => []),
       ])
       setDashData(dash)
       setTransactions(txData.data ?? [])
-      setVentasMes(txData.metricas?.ventasMes ?? 0)
+      const totalTx = txData.metricas?.ventasMes ?? 0
+      setVentasMes(totalTx)
       setPendientes(reembData.pendientes ?? 0)
-      setSalas(Array.isArray(roomsData) ? roomsData : [])
-      setLoading(false)
+      const rooms = Array.isArray(roomsData) ? roomsData : []
+      setSalas(rooms)
+      const cinemas = Array.isArray(cinemasData) ? cinemasData : []
+      const cmap = {}
+      cinemas.forEach(c => { cmap[c.id_cine] = c.nombre_cine })
+      setCineMap(cmap)
+
+      const roomMap = {}
+      rooms.forEach(r => { roomMap[r.id_sala] = r.capacidad_asientos ?? 0 })
+      const totalCapacity = (Array.isArray(showtimes) ? showtimes : [])
+        .reduce((sum, s) => sum + (roomMap[s.id_sala] ?? 0), 0)
+
+      if (totalCapacity > 0 && (!dash.ocupacionPromedio || dash.ocupacionPromedio === 0)) {
+        dash.ocupacionPromedio = parseFloat(((totalTx / totalCapacity) * 100).toFixed(2))
+      }
     } catch {
+      /* ignore */
+    } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    fetchData()
+    intervalRef.current = setInterval(() => fetchData(true), 30000)
+    return () => clearInterval(intervalRef.current)
+  }, [fetchData])
 
   function clearFilters() {
     setSearch('')
@@ -135,14 +180,16 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
 
   const periodTx = transactions.filter(tx => isInPeriod(tx.fecha_transaccion ? new Date(tx.fecha_transaccion) : null))
 
+  const paidTx = periodTx.filter(tx => tx.estado_pago === 'Aprobado' || tx.estado_pago === 'Completada')
+
   const ventasTotales = ventasMes
 
-  const ingresosTotales = periodTx
+  const ingresosTotales = paidTx
     .reduce((sum, tx) => sum + (tx.monto_total ?? 0), 0)
 
   const topMovie = (() => {
     const counts = {}
-    periodTx.forEach(tx => {
+    paidTx.forEach(tx => {
       if (tx.pelicula) counts[tx.pelicula] = (counts[tx.pelicula] ?? 0) + (tx.monto_total ?? 0)
     })
     let best = null
@@ -152,10 +199,24 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
     return best
   })()
 
-  const chartData = (dashData?.ventasPorDia ?? []).map(d => ({
-    day: DAY_NAMES[new Date(d.dia + 'T00:00:00').getDay()],
-    value: d.ventas,
-  }))
+  const chartData = (() => {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+    const daysOpt = PERIOD_MAP[period]?.days
+    const cutoffDays = daysOpt === -1 ? 60 : (daysOpt ?? 30)
+    const cutoffDate = new Date(now)
+    cutoffDate.setDate(cutoffDate.getDate() - cutoffDays)
+    const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth()+1).padStart(2,'0')}-${String(cutoffDate.getDate()).padStart(2,'0')}`
+    return (dashData?.ventasPorDia ?? [])
+      .filter(d => d.dia >= cutoff && d.dia <= today)
+      .map(d => {
+        const dt = new Date(d.dia + (d.dia.includes('T') ? '' : 'T00:00:00'))
+        return {
+          label: isNaN(dt.getTime()) ? d.dia : DAY_NAMES[dt.getDay()],
+          value: d.ventas,
+        }
+      })
+  })()
 
   const salaCategoriaMap = {}
   salas.forEach(s => {
@@ -168,16 +229,18 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
     return salaCategoriaMap[name] || 'General'
   }
 
-  const categoryData = periodTx.reduce((acc, tx) => {
-    const cat = getCategoria(tx)
-    const existing = acc.find(d => d.category === cat)
-    if (existing) existing.value += tx.monto_total ?? 0
-    else acc.push({ category: cat, value: tx.monto_total ?? 0 })
-    return acc
-  }, [])
+  const categoryData = (dashData?.ingresosPorCategoria ?? []).length > 0
+    ? dashData.ingresosPorCategoria.map(c => ({ category: c.tipo_sala, value: c.total }))
+    : paidTx.reduce((acc, tx) => {
+        const cat = getCategoria(tx)
+        const existing = acc.find(d => d.category === cat)
+        if (existing) existing.value += tx.monto_total ?? 0
+        else acc.push({ category: cat, value: tx.monto_total ?? 0 })
+        return acc
+      }, [])
 
   if (typeof window !== 'undefined') {
-    window.__debugDash = { categoryData, chartData, periodTx, ventasTotales, ingresosTotales, topMovie }
+    window.__debugDash = { categoryData, chartData, periodTx, transactions, ventasTotales, ingresosTotales, topMovie }
   }
 
   const cmp = dashData?.comparacion ?? {}
@@ -206,7 +269,9 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
     .slice(0, 10)
 
   return (
-    <div style={{ padding: '28px 28px 40px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+    <>
+      <style>{DASHBOARD_CSS}</style>
+      <div style={{ padding: '28px 28px 40px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1E293B', margin: 0 }}>
@@ -214,29 +279,40 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94A3B8' }}>{dateStr}</p>
         </div>
-        <div style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button
-            onClick={() => setPeriodOpen(o => !o)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer' }}
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', opacity: refreshing ? 0.6 : 1 }}
+            title="Actualizar datos"
           >
-            {period}
-            <ChevronDown style={{ width: 16, height: 16, color: '#94A3B8' }} />
+            <RefreshCw style={{ width: 14, height: 14, animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            {refreshing ? 'Actualizando…' : 'Actualizar'}
           </button>
-          {periodOpen && (
-            <div style={{ position: 'absolute', right: 0, zIndex: 10, marginTop: 6, width: 180, borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', padding: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-              {periodOptions.map(option => (
-                <button
-                  key={option}
-                  onClick={() => { setPeriod(option); setPeriodOpen(false) }}
-                  style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, color: '#475569', background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setPeriodOpen(o => !o)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer' }}
+            >
+              {period}
+              <ChevronDown style={{ width: 16, height: 16, color: '#94A3B8' }} />
+            </button>
+            {periodOpen && (
+              <div style={{ position: 'absolute', right: 0, zIndex: 10, marginTop: 6, width: 180, borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', padding: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                {periodOptions.map(option => (
+                  <button
+                    key={option}
+                    onClick={() => { setPeriod(option); setPeriodOpen(false) }}
+                    style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, color: '#475569', background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -263,7 +339,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
               icon={TrendingUp} iconBg="#F0F9FF" iconColor="#0EA5E9"
               badge={formatBadge(dashData?.ocupacionPromedio)} trend="neutral"
               label="Ocupación Promedio de Asientos"
-              value={`${Math.round(dashData?.ocupacionPromedio ?? 0)}%`}
+              value={formatOccupancy(dashData?.ocupacionPromedio)}
             />
             <SummaryCard
               icon={Film} iconBg="#FFFBEB" iconColor="#F59E0B"
@@ -299,11 +375,11 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
               ) : (
                 <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={chartData}>
-                    <CartesianGrid stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94A3B8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94A3B8" }} />
+                    <CartesianGrid stroke="#E5E7EB" strokeDasharray="4 4" vertical={true} horizontal={true} />
+                    <XAxis dataKey="label" axisLine={{ stroke: '#D1D5DC' }} tickLine={{ stroke: '#D1D5DC' }} tick={{ fontSize: 12, fill: "#9CA3AF" }} interval={0} />
+                    <YAxis axisLine={{ stroke: '#D1D5DC' }} tickLine={{ stroke: '#D1D5DC' }} tick={{ fontSize: 12, fill: "#9CA3AF" }} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={3} dot={{ r: 4, fill: "#4F46E5" }} />
+                    <Line type="monotone" dataKey="value" stroke="#253285" strokeWidth={3} dot={{ r: 5, fill: "#253285", strokeWidth: 0 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -357,7 +433,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
               <select value={salaFilter} onChange={e => setSalaFilter(e.target.value)} style={{ width: '100%', borderRadius: 8, border: '1px solid #E2E8F0', padding: '8px 10px', fontSize: 13, color: '#475569', outline: 'none', background: '#fff' }}>
                 <option value="">Todas las salas</option>
                 {salas.map(s => (
-                  <option key={s.id_sala} value={s.nombre_sala}>{s.nombre_sala}</option>
+                  <option key={s.id_sala} value={s.nombre_sala}>{s.nombre_sala} — {cineMap[s.id_cine] || '?'}</option>
                 ))}
               </select>
             </div>
@@ -430,6 +506,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
         </>
       )}
     </div>
+    </>
   )
 }
 

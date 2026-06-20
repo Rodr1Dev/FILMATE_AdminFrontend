@@ -7,7 +7,7 @@ import LoginPage from './Component/LoginPage.jsx'
 function ProtectedRoute({ children }) {
   const { user, verifying } = useAuth()
   if (verifying) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#666' }}>Verificando sesión...</div>
-  if (!user) return <Navigate to="/login" replace />
+  if (!user || !user.roles?.includes(1)) return <Navigate to="/login" replace />
   return children
 }
 

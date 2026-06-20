@@ -30,6 +30,11 @@ export function AuthProvider({ children }) {
       }
       const data = await res.json()
       const userData = data.user
+
+      if (!userData.roles || !userData.roles.includes(1)) {
+        throw new Error('Acceso denegado. Solo los administradores pueden ingresar al panel.')
+      }
+
       localStorage.setItem(USER_KEY, JSON.stringify(userData))
       setUser(userData)
       return userData
