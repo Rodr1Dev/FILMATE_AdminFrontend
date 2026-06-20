@@ -159,13 +159,14 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar, loading }) {
 
 // ─── PASO 1: SELECCIÓN DE CINES ───────────────────────────────────────────────
 function ModalSeleccionCines({ cines, onConfirmar, onClose }) {
+  const cinesActivos = cines.filter(c => c.estado_cine === 'Activo')
   const [seleccionados, setSeleccionados] = useState([])
-  const todosSeleccionados = seleccionados.length === cines.length && cines.length > 0
+  const todosSeleccionados = seleccionados.length === cinesActivos.length && cinesActivos.length > 0
 
   const toggleCine = (id) => setSeleccionados(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   )
-  const toggleTodos = () => setSeleccionados(todosSeleccionados ? [] : cines.map(c => c.id_cine))
+  const toggleTodos = () => setSeleccionados(todosSeleccionados ? [] : cinesActivos.map(c => c.id_cine))
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1500 }}>
@@ -187,7 +188,10 @@ function ModalSeleccionCines({ cines, onConfirmar, onClose }) {
 
         {/* Lista cines */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cines.map(cine => {
+          {cinesActivos.length === 0 && (
+            <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '20px 0' }}>No hay cines activos disponibles.</p>
+          )}
+          {cinesActivos.map(cine => {
             const sel = seleccionados.includes(cine.id_cine)
             return (
               <div
@@ -234,11 +238,11 @@ function ModalSeleccionCines({ cines, onConfirmar, onClose }) {
 }
 
 // ─── PASO 2: FORMULARIO POR CINE ──────────────────────────────────────────────
-function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, indexActual, onGuardar, onClose }) {
+function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, indexActual, fechaInicial, onGuardar, onAtras, onClose }) {
   const salasDeCine = salas.filter(s => s.id_cine === cine.id_cine)
   const [idPelicula, setIdPelicula] = useState('')
   const [idSala,     setIdSala]     = useState('')
-  const [fechaHora,  setFechaHora]  = useState('')
+  const [fechaHora,  setFechaHora]  = useState(fechaInicial ?? '')
   const [precio,     setPrecio]     = useState('')
 
   // ── Detectar cruce en tiempo real ──
@@ -271,8 +275,23 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
     return resultado.valido ? null : resultado.motivo
   }, [fechaHora, idPelicula, cine.horarios_apertura])
 
+  // ── Detectar fecha/hora en el pasado ──
+  const enElPasado = useMemo(() => {
+    if (!fechaHora) return false
+    return new Date(fechaHora).getTime() < Date.now()
+  }, [fechaHora])
+
+  // mínimo seleccionable = ahora mismo, formateado para datetime-local
+  const ahoraLocal = useMemo(() => {
+    const d = new Date()
+    d.setSeconds(0, 0)
+    const offset = d.getTimezoneOffset()
+    const local = new Date(d.getTime() - offset * 60000)
+    return local.toISOString().slice(0, 16)
+  }, [])
+
   const camposCompletos = idPelicula && idSala && fechaHora && precio
-  const puedeGuardar    = camposCompletos && !cruce && !fueraDeHorario
+  const puedeGuardar    = camposCompletos && !cruce && !fueraDeHorario && !enElPasado
 
   const inputError = { ...inputStyle, borderColor: '#EF4444', background: '#FFF1F2' }
 
@@ -344,8 +363,9 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
             <input
               type="datetime-local"
               value={fechaHora}
+              min={ahoraLocal}
               onChange={e => setFechaHora(e.target.value)}
-              style={(cruce || fueraDeHorario) ? inputError : inputStyle}
+              style={(cruce || fueraDeHorario || enElPasado) ? inputError : inputStyle}
             />
           </Field>
 
@@ -369,15 +389,27 @@ function ModalFormFuncion({ cine, peliculas, salas, showtimes, totalCines, index
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
-          <button onClick={onClose} style={btnSecundario}>Cancelar</button>
-          <button
-            onClick={handleGuardar}
-            disabled={!puedeGuardar}
-            style={{ ...btnPrimario, opacity: puedeGuardar ? 1 : 0.4, cursor: puedeGuardar ? 'pointer' : 'not-allowed' }}
-          >
-            {indexActual + 1 < totalCines ? 'Guardar y continuar →' : 'Guardar y ver resumen'}
-          </button>
+        {/* Mensaje de fecha en el pasado */}
+        {!cruce && !fueraDeHorario && enElPasado && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF1F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 13, color: '#C2410C' }}>
+            ⚠️ No puedes programar una función en una fecha u hora que ya pasó.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 22 }}>
+          {(indexActual > 0 && totalCines > 1) ? (
+            <button onClick={onAtras} style={btnSecundario}>← Cine anterior</button>
+          ) : <span />}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={btnSecundario}>Cancelar</button>
+            <button
+              onClick={handleGuardar}
+              disabled={!puedeGuardar}
+              style={{ ...btnPrimario, opacity: puedeGuardar ? 1 : 0.4, cursor: puedeGuardar ? 'pointer' : 'not-allowed' }}
+            >
+              {indexActual + 1 < totalCines ? 'Guardar y continuar →' : 'Guardar y ver resumen'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -457,6 +489,7 @@ export default function Programacion() {
   const [cinesSeleccionados, setCinesSeleccionados] = useState([])
   const [indexCine,         setIndexCine]         = useState(0)
   const [borrador,          setBorrador]          = useState([])  // funciones acumuladas
+  const [fechaPreseleccionada, setFechaPreseleccionada] = useState(null)
 
   // ── Carga de datos ──
   const cargarTodo = useCallback(async () => {
@@ -528,7 +561,12 @@ export default function Programacion() {
   }
 
   // ── Flujo creación ──
-  const iniciarFlujo = () => { setBorrador([]); setIndexCine(0); setPaso('cines') }
+  const iniciarFlujo = (fechaDia = null) => {
+    setBorrador([])
+    setIndexCine(0)
+    setFechaPreseleccionada(fechaDia ? `${fechaDia}T13:00` : null)
+    setPaso('cines')
+  }
 
   const handleCinesConfirmados = (ids) => {
     const cinesToUse = cines.filter(c => ids.includes(c.id_cine))
@@ -564,7 +602,14 @@ export default function Programacion() {
     finally { setLoading(false) }
   }
 
-  const cerrarFlujo = () => { setPaso(null); setBorrador([]); setIndexCine(0) }
+  // ── Retroceder al cine anterior dentro del flujo de creación ──
+  const handleAtras = () => {
+    if (indexCine === 0) return
+    setBorrador(prev => prev.slice(0, -1)) // descarta la función del cine actual que aún no se confirmó retroceder
+    setIndexCine(i => i - 1)
+  }
+
+  const cerrarFlujo = () => { setPaso(null); setBorrador([]); setIndexCine(0); setFechaPreseleccionada(null) }
 
   // ── Render ──
   const diasDelMes = getDiasDelMes(anio, mes)
@@ -673,7 +718,7 @@ export default function Programacion() {
                 <div style={{ padding: '48px 20px', textAlign: 'center' }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
                   <p style={{ fontSize: 14, color: '#9CA3AF', margin: 0 }}>No hay funciones para este día.</p>
-                  <button onClick={iniciarFlujo} style={{ ...btnPrimario, marginTop: 16, fontSize: 13, padding: '8px 18px' }}>
+                  <button onClick={() => iniciarFlujo(fechaSel)} style={{ ...btnPrimario, marginTop: 16, fontSize: 13, padding: '8px 18px' }}>
                     + Programar función
                   </button>
                 </div>
@@ -772,7 +817,9 @@ export default function Programacion() {
           showtimes={showtimes}
           totalCines={cinesSeleccionados.length}
           indexActual={indexCine}
+          fechaInicial={fechaPreseleccionada}
           onGuardar={handleFormGuardado}
+          onAtras={handleAtras}
           onClose={cerrarFlujo}
         />
       )}
