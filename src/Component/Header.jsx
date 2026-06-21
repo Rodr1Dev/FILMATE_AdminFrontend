@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
+import { useAuth } from '../context/useAuth.js'
 
 const NOTIFICATIONS = [
   { id: 1, type: 'warning', text: 'Reembolso pendiente de revisión', time: 'Hace 10 min' },
@@ -42,6 +42,10 @@ export default function Header() {
     setProfileOpen(false)
     logout()
     navigate('/login')
+  }
+
+    function dismissNotification(id) {
+    setNotifs(current => current.filter(x => x.id !== id))
   }
 
   const unread = notifs.length
@@ -116,13 +120,15 @@ export default function Header() {
                   No hay notificaciones
                 </div>
               ) : notifs.map(n => (
-                <div key={n.id} style={{
-                  display: 'flex', gap: 12, padding: '12px 18px', alignItems: 'flex-start',
-                  borderBottom: '1px solid #F3F4F6', cursor: 'pointer',
-                }}
+                <button type="button" key={n.id} onClick={() => dismissNotification(n.id)}
+                  style={{
+                    display: 'flex', gap: 12, padding: '12px 18px', alignItems: 'flex-start',
+                    cursor: 'pointer', width: '100%', fontFamily: 'inherit',
+                    fontSize: 'inherit', textAlign: 'left', background: 'transparent',
+                    border: 'none', borderBottom: '1px solid #F3F4F6',
+                  }}
                   onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  onClick={() => setNotifs(prev => prev.filter(x => x.id !== n.id))}>
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <div style={{
                     width: 8, height: 8, borderRadius: '50%',
                     background: COLORS[n.type]?.dot || '#9CA3AF', marginTop: 5, flexShrink: 0,
@@ -131,7 +137,7 @@ export default function Header() {
                     <p style={{ margin: 0, fontSize: 13, color: '#121212' }}>{n.text}</p>
                     <p style={{ margin: '3px 0 0', fontSize: 11, color: '#9CA3AF' }}>{n.time}</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
