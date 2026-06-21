@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import PropTypes from 'prop-types'
+import './CinesYSalas.css'
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const CINEMAS_BASE      = '/api/cinemas'       // GET compartido (solo lectura)
@@ -45,6 +47,7 @@ function generarAsientos(capacidad) {
 // ─── MAPA DE ASIENTOS ────────────────────────────────────────────────────────
 function MapaAsientos({ capacidad }) {
   const mapa = generarAsientos(capacidad)
+  const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   return (
     <div style={{
       flex: 1,
@@ -57,23 +60,21 @@ function MapaAsientos({ capacidad }) {
       minWidth: 0,
       overflow: 'hidden',
     }}>
-      {mapa.map((fila, fi) => (
-        <div key={fi} style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
-          {fila.map((tipo, ci) =>
-            tipo === 'vacio' ? (
-              <div key={ci} style={{ width: 13, height: 11, flexShrink: 0 }} />
-            ) : (
-              <div key={ci} style={{
-                width: 13,
-                height: 11,
-                borderRadius: '3px 3px 1px 1px',
-                background: '#6B7280',
-                flexShrink: 0,
-              }} />
-            )
-          )}
-        </div>
-      ))}
+      {mapa.map((fila, fi) => {
+        const letra = letras[fi] ?? `A${fi}`
+        return (
+          <div key={letra} style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+            {fila.map((asiento, ci) => {
+              const key = `${letra}-${ci}`
+              return asiento.tipo === 'vacio' ? (
+                <div key={key} style={{ width: 13, height: 11, flexShrink: 0 }} />
+              ) : (
+                <div key={key} style={{ width: 13, height: 11, borderRadius: '3px 3px 1px 1px', background: '#6B7280', flexShrink: 0 }} />
+              )
+            })}
+          </div>
+        )
+      })}
       <div style={{
         textAlign: 'center',
         color: 'rgba(255,255,255,0.3)',
@@ -90,6 +91,10 @@ function MapaAsientos({ capacidad }) {
   )
 }
 
+MapaAsientos.propTypes = {
+  capacidad: PropTypes.number.isRequired,
+}
+
 // ─── MODAL AGREGAR / EDITAR SALA ─────────────────────────────────────────────
 function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
   const [nombre,       setNombre]       = useState(salaInicial?.nombre_sala ?? '')
@@ -98,6 +103,14 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
   const [capacidad,    setCapacidad]    = useState(salaInicial?.capacidad_asientos ?? '')
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
+  let labelBtn
+  if (loading) {
+    labelBtn = 'Guardando…'
+  } else if (modo === 'crear') {
+    labelBtn = 'Agregar'
+  } else {
+    labelBtn = 'Guardar cambios'
+  }
 
   const handleGuardar = async () => {
     if (!nombre.trim() || !capacidad) { setError('Completa todos los campos.'); return }
@@ -200,12 +213,26 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
           <button onClick={onClose} style={btnSecundario}>Cancelar</button>
           <button onClick={handleGuardar} disabled={loading} style={{ ...btnPrimario, opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Guardando…' : modo === 'crear' ? 'Agregar' : 'Guardar cambios'}
+            {labelBtn}
           </button>
         </div>
       </div>
     </div>
   )
+}
+
+ModalSala.propTypes = {
+  modo: PropTypes.oneOf(['crear', 'editar']).isRequired,
+  salaInicial: PropTypes.shape({
+    nombre_sala: PropTypes.string,
+    tipo_sala: PropTypes.string,
+    tipo_formato: PropTypes.string,
+    capacidad_asientos: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    id_sala: PropTypes.number,
+  }),
+  idCine: PropTypes.number,
+  onClose: PropTypes.func.isRequired,
+  onGuardado: PropTypes.func.isRequired,
 }
 
 // ─── Helpers de horario (días + horas → string "Lunes a Domingo: 10:00AM - 10:00PM") ──
@@ -265,6 +292,14 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
   const [estadoCine,       setEstadoCine]       = useState(cineInicial?.estado_cine ?? 'Activo')
   const [loading,          setLoading]          = useState(false)
   const [error,            setError]            = useState(null)
+  let labelBtnCine
+  if (loading) {
+    labelBtnCine = 'Guardando…'
+  } else if (modo === 'crear') {
+    labelBtnCine = 'Agregar'
+  } else {
+    labelBtnCine = 'Guardar cambios'
+  }
 
   const toggleDia = (dia) => setDiasSeleccionados(prev =>
     prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia]
@@ -310,8 +345,8 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</label>
-              <select value={estadoCine} onChange={e => setEstadoCine(e.target.value)} style={{ ...inputStyle, padding: '5px 10px', fontSize: 13, width: 'auto' }}>
+              <label htmlFor="estado-cine" style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</label>
+              <select id="estado-cine" value={estadoCine} onChange={e => setEstadoCine(e.target.value)} style={{ ...inputStyle, padding: '5px 10px', fontSize: 13, width: 'auto' }}>
                 <option value="Activo">Activo</option>
                 <option value="Inactivo">Inactivo</option>
               </select>
@@ -390,12 +425,27 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
           <button onClick={onClose} style={btnSecundario}>Cancelar</button>
           <button onClick={handleGuardar} disabled={loading} style={{ ...btnPrimario, opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Guardando…' : modo === 'crear' ? 'Agregar' : 'Guardar cambios'}
+            {labelBtnCine}
           </button>
         </div>
       </div>
     </div>
   )
+}
+
+ModalCine.propTypes = {
+  modo: PropTypes.oneOf(['crear', 'editar']).isRequired,
+  cineInicial: PropTypes.shape({
+    nombre_cine: PropTypes.string,
+    direccion: PropTypes.string,
+    horarios_apertura: PropTypes.string,
+    url_mapa_embebido: PropTypes.string,
+    observaciones: PropTypes.string,
+    estado_cine: PropTypes.string,
+    id_cine: PropTypes.number,
+  }),
+  onClose: PropTypes.func.isRequired,
+  onGuardado: PropTypes.func.isRequired,
 }
 
 function Field({ label, children }) {
@@ -405,6 +455,11 @@ function Field({ label, children }) {
       {children}
     </div>
   )
+}
+
+Field.propTypes = {
+  label: PropTypes.string.isRequired,
+  children: PropTypes.node,
 }
 
 const inputStyle = {
@@ -446,6 +501,13 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar, loading }) {
       </div>
     </div>
   )
+}
+
+ModalConfirmar.propTypes = {
+  mensaje: PropTypes.string.isRequired,
+  onConfirmar: PropTypes.func.isRequired,
+  onCancelar: PropTypes.func.isRequired,
+  loading: PropTypes.bool,
 }
 
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
@@ -546,6 +608,145 @@ export default function CinesYSalas() {
     await cargarCines()
   }
 
+  const renderCineList = () => {
+    if (loadingCines) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando…</div>
+    if (errorCines) return <div style={{ padding: '32px 16px', textAlign: 'center', color: '#EF4444', fontSize: 13 }}>⚠️ {errorCines}</div>
+    if (cinesFiltrados.length === 0) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Sin resultados</div>
+    return cinesFiltrados.map(cine => (
+              <div
+                key={cine.id_cine}
+                className="cine-row"
+                style={{
+                  display: 'flex', marginBottom: 4, borderRadius: 9,
+                  background: cineSeleccionado?.id_cine === cine.id_cine ? '#EEF2FF' : undefined,
+                  border: `1px solid ${cineSeleccionado?.id_cine === cine.id_cine ? '#C7D2FE' : 'transparent'}`,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => { setCineSeleccionado(cine); setSalaSeleccionada(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCineSeleccionado(cine); setSalaSeleccionada(null) } }}
+                  style={{
+                    flex: 1, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer',
+                    padding: '11px 12px', background: 'none', border: 'none', borderRadius: 9,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#121212', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {cine.nombre_cine}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {cine.direccion}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 5 }}>
+                    {salas.filter(s => s.id_cine === cine.id_cine).length} sala(s)
+                  </div>
+                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 8px 8px 0', flexShrink: 0 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                    background: cine.estado_cine === 'Activo' ? '#DCFCE7' : '#F3F4F6',
+                    color: cine.estado_cine === 'Activo' ? '#008236' : '#6B7280',
+                  }}>
+                    {cine.estado_cine}
+                  </span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setCineEditando(cine); setModalCine('editar') }}
+                      title="Editar cine"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#1C2566'}
+                      onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setConfirmarElim({ tipo: 'cine', item: cine }) }}
+                      title="Desactivar cine"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                      onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+  }
+
+  const renderSalasContent = () => {
+    if (loadingSalas) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando salas…</div>
+    if (errorSalas) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#EF4444', fontSize: 13 }}>⚠️ {errorSalas}</div>
+    if (!cineSeleccionado) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Selecciona un cine para ver sus salas</div>
+    if (salasDeCine.length === 0) return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Este cine no tiene salas registradas</div>
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {salasDeCine.map(sala => (
+          <div
+            key={sala.id_sala}
+            style={{
+              display: 'flex', alignItems: 'flex-start', borderRadius: 10,
+              background: salaSeleccionada?.id_sala === sala.id_sala ? '#EEF2FF' : '#F9FAFB',
+              border: `1px solid ${salaSeleccionada?.id_sala === sala.id_sala ? '#C7D2FE' : '#E5E7EB'}`,
+              transition: 'all 0.15s',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setSalaSeleccionada(salaSeleccionada?.id_sala === sala.id_sala ? null : sala)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSalaSeleccionada(salaSeleccionada?.id_sala === sala.id_sala ? null : sala) } }}
+              style={{
+                flex: 1, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer',
+                padding: '14px 16px', background: 'none', border: 'none', borderRadius: 10,
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#121212', marginBottom: 3 }}>{sala.nombre_sala}</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6 }}>{sala.capacidad_asientos} asientos</div>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 999,
+                background: '#EEF2FF', color: '#283593',
+              }}>
+                {sala.tipo_sala} {sala.tipo_formato}
+              </span>
+            </button>
+            <div style={{ display: 'flex', gap: 4, padding: '14px 16px 14px 0', flexShrink: 0 }}>
+              <button
+                onClick={e => { e.stopPropagation(); setSalaSeleccionada(sala); setModalSala('editar') }}
+                title="Editar sala"
+                style={{ background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', color: '#6B7280', display: 'flex', alignItems: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.color = '#283593' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6B7280' }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmarElim({ tipo: 'sala', item: sala }) }}
+                title="Eliminar sala"
+                style={{ background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', color: '#6B7280', display: 'flex', alignItems: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6B7280'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: '28px 28px 40px' }}>
 
@@ -592,75 +793,7 @@ export default function CinesYSalas() {
 
           {/* Lista cines */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
-            {loadingCines ? (
-              <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando…</div>
-            ) : errorCines ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: '#EF4444', fontSize: 13 }}>⚠️ {errorCines}</div>
-            ) : cinesFiltrados.length === 0 ? (
-              <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Sin resultados</div>
-            ) : cinesFiltrados.map(cine => (
-              <div
-                key={cine.id_cine}
-                onClick={() => { setCineSeleccionado(cine); setSalaSeleccionada(null) }}
-                style={{
-                  padding: '11px 12px', borderRadius: 9, cursor: 'pointer', marginBottom: 4,
-                  background: cineSeleccionado?.id_cine === cine.id_cine ? '#EEF2FF' : 'transparent',
-                  border: `1px solid ${cineSeleccionado?.id_cine === cine.id_cine ? '#C7D2FE' : 'transparent'}`,
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { if (cineSeleccionado?.id_cine !== cine.id_cine) e.currentTarget.style.background = '#F9FAFB' }}
-                onMouseLeave={e => { if (cineSeleccionado?.id_cine !== cine.id_cine) e.currentTarget.style.background = 'transparent' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#121212', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {cine.nombre_cine}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {cine.direccion}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-                      background: cine.estado_cine === 'Activo' ? '#DCFCE7' : '#F3F4F6',
-                      color: cine.estado_cine === 'Activo' ? '#008236' : '#6B7280',
-                    }}>
-                      {cine.estado_cine}
-                    </span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {/* Editar cine */}
-                      <button
-                        onClick={e => { e.stopPropagation(); setCineEditando(cine); setModalCine('editar') }}
-                        title="Editar cine"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
-                        onMouseEnter={e => e.currentTarget.style.color = '#1C2566'}
-                        onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                      </button>
-                      {/* Eliminar cine */}
-                      <button
-                        onClick={e => { e.stopPropagation(); setConfirmarElim({ tipo: 'cine', item: cine }) }}
-                        title="Desactivar cine"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#D1D5DB', lineHeight: 1 }}
-                        onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
-                        onMouseLeave={e => e.currentTarget.style.color = '#D1D5DB'}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 5 }}>
-                  {salas.filter(s => s.id_cine === cine.id_cine).length} sala(s)
-                </div>
-              </div>
-            ))}
+            {renderCineList()}
           </div>
 
           <div style={{ padding: '8px 16px 12px', borderTop: '1px solid #F3F4F6' }}>
@@ -700,68 +833,7 @@ export default function CinesYSalas() {
             </div>
 
             <div style={{ padding: 16 }}>
-              {loadingSalas ? (
-                <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando salas…</div>
-              ) : errorSalas ? (
-                <div style={{ padding: '32px 0', textAlign: 'center', color: '#EF4444', fontSize: 13 }}>⚠️ {errorSalas}</div>
-              ) : !cineSeleccionado ? (
-                <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Selecciona un cine para ver sus salas</div>
-              ) : salasDeCine.length === 0 ? (
-                <div style={{ padding: '32px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Este cine no tiene salas registradas</div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  {salasDeCine.map(sala => (
-                    <div
-                      key={sala.id_sala}
-                      onClick={() => setSalaSeleccionada(prev => prev?.id_sala === sala.id_sala ? null : sala)}
-                      style={{
-                        background: salaSeleccionada?.id_sala === sala.id_sala ? '#EEF2FF' : '#F9FAFB',
-                        border: `1px solid ${salaSeleccionada?.id_sala === sala.id_sala ? '#C7D2FE' : '#E5E7EB'}`,
-                        borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: '#121212', marginBottom: 3 }}>{sala.nombre_sala}</div>
-                          <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6 }}>{sala.capacidad_asientos} asientos</div>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 999,
-                            background: '#EEF2FF', color: '#283593',
-                          }}>
-                            {sala.tipo_sala} {sala.tipo_formato}
-                          </span>
-                        </div>
-                        {/* Acciones */}
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setSalaSeleccionada(sala); setModalSala('editar') }}
-                            title="Editar sala"
-                            style={{ background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', color: '#6B7280', display: 'flex', alignItems: 'center' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.color = '#283593' }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6B7280' }}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); setConfirmarElim({ tipo: 'sala', item: sala }) }}
-                            title="Eliminar sala"
-                            style={{ background: 'none', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', color: '#6B7280', display: 'flex', alignItems: 'center' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6B7280'; e.currentTarget.style.borderColor = '#E5E7EB' }}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {renderSalasContent()}
             </div>
           </div>
 
@@ -850,4 +922,9 @@ function InfoFila({ label, valor }) {
       <div style={{ fontSize: 13, color: '#121212', fontWeight: 500 }}>{valor}</div>
     </div>
   )
+}
+
+InfoFila.propTypes = {
+  label: PropTypes.string.isRequired,
+  valor: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
 }

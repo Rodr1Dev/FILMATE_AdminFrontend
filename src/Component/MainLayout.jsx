@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import PropTypes from 'prop-types'
 import MenuPrincipal from './MenuPrincipal.jsx'
 import Header from './Header.jsx'
 import DashboardPrincipal from './Admin/DashboardPrincipal.jsx'
@@ -18,6 +19,10 @@ function PlaceholderView({ nombre }) {
       </p>
     </div>
   )
+}
+
+PlaceholderView.propTypes = {
+  nombre: PropTypes.string,
 }
 
 export default function MainLayout() {

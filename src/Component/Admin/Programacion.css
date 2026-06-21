@@ -1,0 +1,36 @@
+.day-cell {
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.12s;
+}
+.day-cell:hover:not(.day-selected) {
+  background: #F3F4F6 !important;
+}
+.day-cell.day-selected {
+  background: #1C2566 !important;
+}
+.day-cell.day-today:not(.day-selected) {
+  background: #EEF2FF !important;
+}
+
+.movie-row {
+  font-family: inherit;
+  font-size: inherit;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s;
+}
+.movie-row:hover:not(.movie-expanded) {
+  background: #F9FAFB !important;
+}
+.movie-row.movie-expanded {
+  background: #F8F9FF !important;
+}

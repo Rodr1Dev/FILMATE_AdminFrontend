@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import PropTypes from 'prop-types'
 
 const FAQS = [
   { q: '¿Cómo agrego una película al catálogo?',
@@ -28,6 +29,12 @@ function Section({ title, icon, children, style }) {
     </div>
   )
 }
+Section.propTypes = {
+  title: PropTypes.string,
+  icon: PropTypes.string,
+  children: PropTypes.node,
+  style: PropTypes.object,
+}
 
 function FaqItem({ q, a, open, onToggle }) {
   return (
@@ -47,6 +54,12 @@ function FaqItem({ q, a, open, onToggle }) {
       )}
     </div>
   )
+}
+FaqItem.propTypes = {
+  q: PropTypes.string.isRequired,
+  a: PropTypes.string.isRequired,
+  open: PropTypes.bool,
+  onToggle: PropTypes.func.isRequired,
 }
 
 export default function AyudaSoporte() {
@@ -102,7 +115,7 @@ export default function AyudaSoporte() {
 
       <Section title="Preguntas Frecuentes" icon="❓" style={{ marginBottom: 24 }}>
         {FAQS.map((faq, i) => (
-          <FaqItem key={i} q={faq.q} a={faq.a} open={faqOpen === i} onToggle={() => setFaqOpen(faqOpen === i ? null : i)} />
+          <FaqItem key={faq.q} q={faq.q} a={faq.a} open={faqOpen === i} onToggle={() => setFaqOpen(faqOpen === i ? null : i)} />
         ))}
       </Section>
 

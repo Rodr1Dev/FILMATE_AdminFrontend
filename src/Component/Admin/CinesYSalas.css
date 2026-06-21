@@ -1,0 +1,6 @@
+.cine-row {
+  transition: background 0.15s;
+}
+.cine-row:hover {
+  background: #F9FAFB;
+}

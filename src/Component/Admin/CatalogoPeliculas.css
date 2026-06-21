@@ -31,12 +31,12 @@
 
 .movie-card-btn:hover {
   background: #F3F4F6;
-  color: #6B7280;
+  color: #4B5563;
 }
 
 .movie-card-btn.btn-del:hover {
   background: #FEF2F2;
-  color: #EF4444;
+  color: #B91C1C;
 }
 
 /* ─── Movies Grid ──────────────────────────────────────────────────────────────── */

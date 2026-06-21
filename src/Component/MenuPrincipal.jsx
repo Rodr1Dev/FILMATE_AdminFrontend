@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import PropTypes from 'prop-types'
 
 const ICONS = {
   grid:        "M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z",
@@ -21,6 +22,10 @@ function Icon({ name, size = 17 }) {
       <path d={ICONS[name] || ICONS.settings} />
     </svg>
   )
+}
+Icon.propTypes = {
+  name: PropTypes.string.isRequired,
+  size: PropTypes.number,
 }
 
 const NAV_ITEMS = [
@@ -118,7 +123,7 @@ const CSS = `
 
 export default function MenuPrincipal({ activeIndex, onNavigate }) {
   const [localActive, setLocalActive] = useState(0)
-  const active = activeIndex !== undefined ? activeIndex : localActive
+  const active = activeIndex ?? localActive
   const setActive = onNavigate || setLocalActive
 
   return (
@@ -159,4 +164,8 @@ export default function MenuPrincipal({ activeIndex, onNavigate }) {
       </div>
     </>
   )
+}
+MenuPrincipal.propTypes = {
+  activeIndex: PropTypes.number,
+  onNavigate: PropTypes.func,
 }
