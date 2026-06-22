@@ -450,10 +450,10 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   }
 
   return (
-    <div role="button" tabIndex={0}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+    <button type="button"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
       onClick={e => e.target === e.currentTarget && onClose()}
-      onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') onClose() }}>
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Solicitar Reembolso</h3>
 
@@ -496,7 +496,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
           </button>
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 ReembolsoModal.propTypes = {
@@ -529,10 +529,10 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
   }
 
   return (
-    <div role="button" tabIndex={0}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+    <button type="button"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
       onClick={e => e.target === e.currentTarget && onClose()}
-      onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') onClose() }}>
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Resolver Solicitud #{solicitud.id_reembolso}</h3>
         <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>
@@ -573,7 +573,7 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
           </button>
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 ResolveModal.propTypes = {
@@ -992,10 +992,10 @@ function TabDevoluciones() {
         />
       )}
       {detailTarget && (
-        <div role="button" tabIndex={0}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        <button type="button"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
           onClick={e => e.target === e.currentTarget && setDetailTarget(null)}
-          onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') setDetailTarget(null) }}>
+          onKeyDown={e => { if (e.key === 'Escape') setDetailTarget(null) }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Detalle de Solicitud #{detailTarget.id_reembolso}</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 16 }}>
@@ -1032,7 +1032,7 @@ function TabDevoluciones() {
               <button onClick={() => setDetailTarget(null)} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>

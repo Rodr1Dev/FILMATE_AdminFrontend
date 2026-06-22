@@ -239,6 +239,27 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   const [transactions, setTransactions] = useState([])
   const [ventasMes, setVentasMes] = useState(0)
   const [pendientes, setPendientes] = useState(0)
+  const [reportesGen, setReportesGen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('reportes_generados')) || { count: 0, date: null } }
+    catch { return { count: 0, date: null } }
+  })
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const val = JSON.parse(localStorage.getItem('reportes_generados'))
+        if (val) setReportesGen(val)
+      } catch {}
+    }
+    globalThis.addEventListener('focus', sync)
+    globalThis.addEventListener('storage', sync)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      globalThis.removeEventListener('focus', sync)
+      globalThis.removeEventListener('storage', sync)
+      document.removeEventListener('visibilitychange', sync)
+    }
+  }, [])
   const [salas, setSalas] = useState([])
   const [cineMap, setCineMap] = useState({})
   const [loading, setLoading] = useState(true)
@@ -340,6 +361,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
       topMovie={topMovie}
       cmp={cmp}
       pendientes={pendientes}
+      reportesGen={reportesGen}
       ventasTotales={ventasTotales}
       ingresosTotales={ingresosTotales}
       search={search}
@@ -383,7 +405,10 @@ DashboardContent.propTypes = {
       cambioPorcentual: PropTypes.number,
     }),
   }),
-  pendientes: PropTypes.number,
+  reportesGen: PropTypes.shape({
+    count: PropTypes.number,
+    date: PropTypes.string,
+  }),
   ventasTotales: PropTypes.number,
   ingresosTotales: PropTypes.number,
   search: PropTypes.string,
@@ -403,7 +428,7 @@ function DashboardContent(props) {
   const {
     dateStr, refreshing, fetchData,
     period, setPeriod, periodOpen, setPeriodOpen,
-    dashData, chartData, categoryData, topMovie, cmp, pendientes,
+    dashData, chartData, categoryData, topMovie, cmp, reportesGen,
     ventasTotales, ingresosTotales,
     search, setSearch, estadoFilter, setEstadoFilter, salaFilter, setSalaFilter,
     salas, cineMap, filteredTx, clearFilters, onViewTransaction,
@@ -491,9 +516,10 @@ function DashboardContent(props) {
           />
           <SummaryCard
             icon={FileText} iconBg="#F1F5F9" iconColor="#64748B"
-            badge={pendientes > 0 ? `-${pendientes}` : '0'} trend={pendientes > 0 ? 'down' : 'neutral'}
-            label="Reportes Pendientes"
-            value={String(pendientes)}
+            badge={reportesGen?.count > 0 ? '1' : '0'} trend={reportesGen?.count > 0 ? 'up' : 'neutral'}
+            label="Reportes Generados"
+            value={String(reportesGen?.count ?? 0)}
+            sub={reportesGen?.date ? new Date(reportesGen.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
           />
         </div>
 
@@ -658,9 +684,10 @@ SummaryCard.propTypes = {
   trend: PropTypes.string,
   label: PropTypes.string.isRequired,
   value: PropTypes.string.isRequired,
+  sub: PropTypes.string,
 }
 
-function SummaryCard({ icon: Icon, iconBg, iconColor, badge, trend, label, value }) {
+function SummaryCard({ icon: Icon, iconBg, iconColor, badge, trend, label, value, sub }) {
   const trendStyle = trendStyleConfig(trend)
 
   return (
@@ -679,6 +706,7 @@ function SummaryCard({ icon: Icon, iconBg, iconColor, badge, trend, label, value
       </div>
       <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>{label}</p>
       <p style={{ fontSize: 22, fontWeight: 700, color: '#1E293B', margin: '4px 0 0' }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0' }}>{sub}</p>}
     </div>
   )
 }
