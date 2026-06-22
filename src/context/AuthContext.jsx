@@ -36,6 +36,9 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem(USER_KEY, JSON.stringify(userData))
+      if (data.access_token) {
+        localStorage.setItem('filmate_token', data.access_token)
+      }
       setUser(userData)
       return userData
     } finally {
@@ -45,6 +48,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('filmate_token')
     setUser(null)
   }, [])
 
@@ -53,14 +57,16 @@ export function AuthProvider({ children }) {
       setVerifying(false)
       return
     }
-    fetch('/api/admin/rooms/?limit=1', {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const token = localStorage.getItem('filmate_token')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    fetch('/api/admin/rooms/?limit=1', { headers })
       .then(res => {
         if (!res.ok) throw new Error('Sesión inválida')
       })
       .catch(() => {
         localStorage.removeItem(USER_KEY)
+        localStorage.removeItem('filmate_token')
         setUser(null)
       })
       .finally(() => setVerifying(false))
