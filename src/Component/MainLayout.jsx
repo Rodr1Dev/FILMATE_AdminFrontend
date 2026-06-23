@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import PropTypes from 'prop-types'
 import MenuPrincipal from './MenuPrincipal.jsx'
 import Header from './Header.jsx'
 import DashboardPrincipal from './Admin/DashboardPrincipal.jsx'
@@ -6,6 +7,7 @@ import VentasYTickets from './Admin/VentasYTickets.jsx'
 import CatalogoPeliculas from './Admin/CatalogoPeliculas.jsx'
 import Programacion from './Admin/Programacion.jsx'
 import CinesYSalas from './Admin/CinesYSalas.jsx'
+import Reportes from './Admin/Reportes.jsx'
 import AyudaSoporte from './Admin/AyudaSoporte.jsx'
 
 // Placeholder for other sections
@@ -20,6 +22,10 @@ function PlaceholderView({ nombre }) {
   )
 }
 
+PlaceholderView.propTypes = {
+  nombre: PropTypes.string,
+}
+
 export default function MainLayout() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [detailTxnId, setDetailTxnId] = useState(null)
@@ -29,7 +35,7 @@ export default function MainLayout() {
       case 2: return <CatalogoPeliculas />
       case 5: return <VentasYTickets initialTxnId={detailTxnId} />
       case 0: return <DashboardPrincipal onNavigate={setActiveIndex} onViewTransaction={(id) => { setDetailTxnId(id); setActiveIndex(5) }} />
-      case 1: return <PlaceholderView nombre="Reportes" />
+      case 1: return <Reportes />
       case 3: return <CinesYSalas />
       case 4: return <Programacion />
       case 6: return <PlaceholderView nombre="Usuarios y Roles" />

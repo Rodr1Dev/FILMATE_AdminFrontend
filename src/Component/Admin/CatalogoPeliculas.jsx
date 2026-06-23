@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import PropTypes from 'prop-types'
 import './CatalogoPeliculas.css'
 
-// ─── API Configuration ────────────────────────────────────────────────────────
 const API_BASE = '/api'
 
 const ADMIN = `${API_BASE}/admin/movies`
@@ -17,12 +17,15 @@ const api = {
   }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
   delete:  (id)                    => fetch(`${ADMIN}/${id}`, {
     method: 'DELETE',
-  }).then(r => { if (!r.ok) throw new Error(r.statusText); return r.text().then(t => t ? JSON.parse(t) : {}) }),
+  }).then(async r => {
+    if (!r.ok) throw new Error(r.statusText)
+    const t = await r.text()
+    return t ? JSON.parse(t) : {}
+  }),
   genres:          () => fetch(`${ADMIN}/meta/genres`).then(r => r.json()),
   classifications: () => fetch(`${ADMIN}/meta/classifications`).then(r => r.json()),
 }
 
-// ─── Helpers para extraer strings de objetos ─────────────────────────────────
 function extractString(value) {
   if (typeof value === 'string') return value
   if (value && typeof value === 'object' && value.nombre) return value.nombre
@@ -41,7 +44,6 @@ function extractGenres(value) {
   return []
 }
 
-// ─── Field mapping ────────────────────────────────────────────────────────────
 function backendToFrontend(m) {
   if (!m) return {}
 
@@ -55,7 +57,8 @@ function backendToFrontend(m) {
   if (m.duracion_minutos) {
     const h   = Math.floor(m.duracion_minutos / 60)
     const min = m.duracion_minutos % 60
-    duracion  = h > 0 ? `${h}h ${min > 0 ? `${min} min` : ''}` : `${min} min`
+    const minPart = min > 0 ? `${min} min` : ''
+    duracion  = h > 0 ? `${h}h ${minPart}` : `${min} min`
   } else if (m.duracion) {
     duracion = m.duracion
   }
@@ -81,8 +84,8 @@ function backendToFrontend(m) {
 function frontendToBackend(f, mode = 'create') {
   let duracion_minutos = null
   if (f.duracion && f.duracion.trim() !== '') {
-    const solo = parseInt(f.duracion)
-    if (!isNaN(solo) && solo > 0) {
+    const solo = Number.parseInt(f.duracion)
+    if (!Number.isNaN(solo) && solo > 0) {
       duracion_minutos = solo
     }
   }
@@ -106,17 +109,17 @@ function frontendToBackend(f, mode = 'create') {
   return body
 }
 
-// ─── Validación del formulario ────────────────────────────────────────────────
 function validarForm(form) {
   const errores = {}
   if (!form.titulo?.trim())         errores.titulo         = 'El título es obligatorio'
   if (!form.anio_lanzamiento)       errores.anio_lanzamiento = 'El año de lanzamiento es obligatorio'
   else if (form.anio_lanzamiento < 1888 || form.anio_lanzamiento > 2100) errores.anio_lanzamiento = 'Año inválido'
   if (!form.sinopsis?.trim())       errores.sinopsis       = 'La sinopsis es obligatoria'
-  if (!form.duracion?.trim())       errores.duracion       = 'La duración es obligatoria'
-  else {
-    const solo = parseInt(form.duracion)
-    if (isNaN(solo) || solo <= 0)   errores.duracion       = 'Duración inválida (solo números, ej: 120)'
+  if (form.duracion?.trim()) {
+    const solo = Number.parseInt(form.duracion)
+    if (Number.isNaN(solo) || solo <= 0) errores.duracion = 'Duración inválida (solo números, ej: 120)'
+  } else {
+    errores.duracion = 'La duración es obligatoria'
   }
   if (!form.clasificacion)          errores.clasificacion  = 'La clasificación es obligatoria'
   if (!form.generos?.length)        errores.generos        = 'Selecciona al menos un género'
@@ -127,7 +130,6 @@ function validarForm(form) {
   return errores
 }
 
-// ─── Helper components ────────────────────────────────────────────────────────
 function EstadoBadge({ estado }) {
   const map = {
     'EN CARTELERA': { bg: '#DCFCE7', text: '#008236' },
@@ -142,6 +144,10 @@ function EstadoBadge({ estado }) {
   )
 }
 
+EstadoBadge.propTypes = {
+  estado: PropTypes.string,
+}
+
 function GeneroBadge({ genero }) {
   return (
     <span style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -150,12 +156,8 @@ function GeneroBadge({ genero }) {
   )
 }
 
-function Icon({ d, size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  )
+GeneroBadge.propTypes = {
+  genero: PropTypes.string,
 }
 
 const ICON_EDIT    = "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
@@ -168,6 +170,19 @@ const ICON_CHECK   = "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3"
 const ICON_WARN    = "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"
 const ICON_REFRESH = "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
 
+function Icon({ d, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  )
+}
+
+Icon.propTypes = {
+  d: PropTypes.string.isRequired,
+  size: PropTypes.number,
+}
+
 function Overlay({ children, onClose }) {
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -176,21 +191,24 @@ function Overlay({ children, onClose }) {
   }, [onClose])
 
   return (
-    <div
-      role="presentation"
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    <button
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+      aria-label="Cerrar"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, border: 'none', cursor: 'default' }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        onClick={e => e.stopPropagation()}
         style={{ maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}
       >
         {children}
       </div>
-    </div>
+    </button>
   )
+}
+
+Overlay.propTypes = {
+  children: PropTypes.node,
+  onClose: PropTypes.func.isRequired,
 }
 
 function ConfirmDiscard({ onSi, onNo }) {
@@ -209,6 +227,11 @@ function ConfirmDiscard({ onSi, onNo }) {
   )
 }
 
+ConfirmDiscard.propTypes = {
+  onSi: PropTypes.func.isRequired,
+  onNo: PropTypes.func.isRequired,
+}
+
 function SuccessOverlay({ mensaje, onClose }) {
   return (
     <Overlay onClose={onClose}>
@@ -219,6 +242,11 @@ function SuccessOverlay({ mensaje, onClose }) {
       </div>
     </Overlay>
   )
+}
+
+SuccessOverlay.propTypes = {
+  mensaje: PropTypes.string,
+  onClose: PropTypes.func.isRequired,
 }
 
 function ErrorOverlay({ mensaje, onClose }) {
@@ -232,6 +260,11 @@ function ErrorOverlay({ mensaje, onClose }) {
       </div>
     </Overlay>
   )
+}
+
+ErrorOverlay.propTypes = {
+  mensaje: PropTypes.string,
+  onClose: PropTypes.func.isRequired,
 }
 
 function ConfirmEliminar({ titulo, loading, onCancelar, onEliminar }) {
@@ -248,6 +281,13 @@ function ConfirmEliminar({ titulo, loading, onCancelar, onEliminar }) {
       </div>
     </Overlay>
   )
+}
+
+ConfirmEliminar.propTypes = {
+  titulo: PropTypes.string,
+  loading: PropTypes.bool,
+  onCancelar: PropTypes.func.isRequired,
+  onEliminar: PropTypes.func.isRequired,
 }
 
 function GeneroSelector({ value, onChange, genres, error }) {
@@ -267,6 +307,9 @@ function GeneroSelector({ value, onChange, genres, error }) {
           const nombre = g.nombre_genero || g.nombre
           const active = value.includes(id)
 
+          const borderColor = error ? '#FCA5A5' : '#D1D5DC'
+          const bgColor = error ? '#FEF2F2' : '#F9FAFB'
+
           return (
             <button
               key={id}
@@ -278,8 +321,8 @@ function GeneroSelector({ value, onChange, genres, error }) {
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: 'pointer',
-                border: active ? 'none' : `1px solid ${error ? '#FCA5A5' : '#D1D5DC'}`,
-                background: active ? '#1C2566' : (error ? '#FEF2F2' : '#F9FAFB'),
+                border: active ? 'none' : `1px solid ${borderColor}`,
+                background: active ? '#1C2566' : bgColor,
                 color: active ? '#fff' : '#374151',
                 transition: 'all 0.15s',
               }}
@@ -298,12 +341,22 @@ function GeneroSelector({ value, onChange, genres, error }) {
   )
 }
 
+GeneroSelector.propTypes = {
+  value: PropTypes.array,
+  onChange: PropTypes.func,
+  genres: PropTypes.array,
+  error: PropTypes.string,
+}
+
 function FieldError({ msg }) {
   if (!msg) return null
   return <p style={{ fontSize: 11, color: '#EF4444', margin: '4px 0 0', fontWeight: 500 }}>{msg}</p>
 }
 
-// ─── PeliculaForm ─────────────────────────────────────────────────────────────
+FieldError.propTypes = {
+  msg: PropTypes.string,
+}
+
 function PeliculaForm({
   initial,
   onGuardar,
@@ -407,7 +460,7 @@ function PeliculaForm({
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon d={ICON_WARN} size={16} />
             <span style={{ fontSize: 13, color: '#DC2626', fontWeight: 600 }}>
-              Completa todos los campos obligatorios ({camposFaltantes} pendiente{camposFaltantes !== 1 ? 's' : ''})
+              {`Completa todos los campos obligatorios (${camposFaltantes} pendiente${camposFaltantes === 1 ? '' : 's'})`}
             </span>
           </div>
         )}
@@ -415,36 +468,36 @@ function PeliculaForm({
         <p style={section}>Información General</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={label}>Título *</label>
-            <input style={fieldStyle('titulo')} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
+            <label style={label} htmlFor="titulo">Título *</label>
+            <input id="titulo" style={fieldStyle('titulo')} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
             <FieldError msg={errores.titulo} />
           </div>
           <div>
-            <label style={label}>Clasificación de edad *</label>
-            <select style={fieldStyle('clasificacion')} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
+            <label style={label} htmlFor="clasificacion">Clasificación de edad *</label>
+            <select id="clasificacion" style={fieldStyle('clasificacion')} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
               <option value="">Seleccionar</option>
               {classifications.map(c => <option key={c}>{c}</option>)}
             </select>
             <FieldError msg={errores.clasificacion} />
           </div>
           <div>
-            <label style={label}>Duración * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(minutos, ej: 120)</span></label>
-            <input style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="120" type="number" min="1" />
+            <label style={label} htmlFor="duracion">Duración * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(minutos, ej: 120)</span></label>
+            <input id="duracion" style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="120" type="number" min="1" />
             <FieldError msg={errores.duracion} />
           </div>
           <div>
-            <label style={label}>Año de lanzamiento * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(ej: 2025)</span></label>
-            <input style={fieldStyle('anio_lanzamiento')} value={form.anio_lanzamiento} onChange={e => set('anio_lanzamiento', e.target.value)} placeholder="2025" type="number" min="1888" max="2100" />
+            <label style={label} htmlFor="anio_lanzamiento">Año de lanzamiento * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(ej: 2025)</span></label>
+            <input id="anio_lanzamiento" style={fieldStyle('anio_lanzamiento')} value={form.anio_lanzamiento} onChange={e => set('anio_lanzamiento', e.target.value)} placeholder="2025" type="number" min="1888" max="2100" />
             <FieldError msg={errores.anio_lanzamiento} />
           </div>
           <div>
-            <label style={label}>Director *</label>
-            <input style={fieldStyle('director')} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
+            <label style={label} htmlFor="director">Director *</label>
+            <input id="director" style={fieldStyle('director')} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
             <FieldError msg={errores.director} />
           </div>
           <div>
-            <label style={label}>Estado *</label>
-            <select style={fieldStyle('estado')} value={form.estado} onChange={e => set('estado', e.target.value)}>
+            <label style={label} htmlFor="estado">Estado *</label>
+            <select id="estado" style={fieldStyle('estado')} value={form.estado} onChange={e => set('estado', e.target.value)}>
               <option value="EN CARTELERA">En cartelera</option>
               <option value="PRÓXIMAMENTE">Próximamente</option>
               <option value="ACTIVO">Activo</option>
@@ -455,7 +508,7 @@ function PeliculaForm({
 
         <p style={section}>Géneros *</p>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ ...label, marginBottom: 8 }}>Selecciona uno o más géneros</label>
+          <label style={{ ...label, marginBottom: 8 }} htmlFor="generos-select">Selecciona uno o más géneros</label>
           <GeneroSelector
             value={form.generos}
             onChange={v => { set('generos', v); if (errores.generos) setErrores(prev => ({ ...prev, generos: undefined })) }}
@@ -467,18 +520,18 @@ function PeliculaForm({
         <p style={section}>Multimedia</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
-            <label style={label}>URL Poster *</label>
-            <input style={fieldStyle('poster')} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
+            <label style={label} htmlFor="poster">URL Poster *</label>
+            <input id="poster" style={fieldStyle('poster')} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
             <FieldError msg={errores.poster} />
           </div>
           <div>
-            <label style={label}>URL Tráiler *</label>
-            <input style={fieldStyle('trailer')} value={form.trailer} onChange={e => set('trailer', e.target.value)} placeholder="https://www.youtube.com/embed/..." />
+            <label style={label} htmlFor="trailer">URL Tráiler *</label>
+            <input id="trailer" style={fieldStyle('trailer')} value={form.trailer} onChange={e => set('trailer', e.target.value)} placeholder="https://www.youtube.com/embed/..." />
             <FieldError msg={errores.trailer} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={label}>URL Banner <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(opcional)</span></label>
-            <input style={fieldStyle('banner')} value={form.banner} onChange={e => set('banner', e.target.value)} placeholder="https://... (imagen horizontal para el banner)" />
+            <label style={label} htmlFor="banner">URL Banner <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(opcional)</span></label>
+            <input id="banner" style={fieldStyle('banner')} value={form.banner} onChange={e => set('banner', e.target.value)} placeholder="https://... (imagen horizontal para el banner)" />
           </div>
         </div>
 
@@ -491,15 +544,15 @@ function PeliculaForm({
 
         <p style={section}>Descripción</p>
         <div style={{ marginBottom: 12 }}>
-          <label style={label}>Sinopsis *</label>
-          <textarea style={{ ...fieldStyle('sinopsis'), minHeight: 70, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
+          <label style={label} htmlFor="sinopsis">Sinopsis *</label>
+          <textarea id="sinopsis" style={{ ...fieldStyle('sinopsis'), minHeight: 70, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
           <FieldError msg={errores.sinopsis} />
         </div>
 
         <p style={section}>Reparto *</p>
         <div style={{ marginBottom: 14 }}>
-          <label style={label}>Elenco <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(nombres separados por coma)</span></label>
-          <textarea style={{ ...fieldStyle('elenco'), minHeight: 60, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Ej: Nicholas Galitzine, Jared Leto, Camila Mendes" />
+          <label style={label} htmlFor="elenco">Elenco <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(nombres separados por coma)</span></label>
+          <textarea id="elenco" style={{ ...fieldStyle('elenco'), minHeight: 60, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Ej: Nicholas Galitzine, Jared Leto, Camila Mendes" />
           <FieldError msg={errores.elenco} />
         </div>
 
@@ -529,7 +582,15 @@ function PeliculaForm({
   )
 }
 
-// ─── VerPelicula ──────────────────────────────────────────────────────────────
+PeliculaForm.propTypes = {
+  initial: PropTypes.object,
+  onGuardar: PropTypes.func.isRequired,
+  onCancelar: PropTypes.func.isRequired,
+  saving: PropTypes.bool,
+  genres: PropTypes.array,
+  classifications: PropTypes.array,
+}
+
 function VerPelicula({ movie, onClose }) {
   if (!movie) return null
 
@@ -543,17 +604,17 @@ function VerPelicula({ movie, onClose }) {
   return (
     <Overlay onClose={onClose}>
       <div style={{ background: '#fff', borderRadius: 16, width: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
-        <div style={{ position: 'relative', height: 210, background: 'linear-gradient(135deg, #1C2566 0%, #0f1642 100%)', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', height: 210, background: 'linear-gradient(135deg, #1C2566 0%, #0f1642 100%)', overflow: 'hidden'}}>
          {(movie.banner || movie.poster) && (
           <img src={movie.banner || movie.poster} alt="" onError={e => e.target.style.display='none'}
           style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 1 }} />
             )}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%)' }} />
-          <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
             <Icon d={ICON_X} size={16} />
           </button>
           <div style={{ position: 'absolute', bottom: 18, left: 22, display: 'flex', gap: 18, alignItems: 'flex-end' }}>
-            <div style={{ width: 88, height: 126, borderRadius: 10, border: '2px solid rgba(255,255,255,0.25)', background: '#364153', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ width: 88, height: 126, borderRadius: 10, border: '2px solid rgba(255,255,255,0.25)', background: '#364153', overflow: 'hidden', flexShrink: 0}}>
               {movie.poster
                 ? <img src={movie.poster} alt={movie.titulo} onError={e => e.target.style.display='none'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 10 }}>Sin imagen</div>
@@ -566,7 +627,7 @@ function VerPelicula({ movie, onClose }) {
                   <span key={g} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600 }}>{g}</span>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap'}}>
                 {movie.clasificacion && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Edad:</b> {movie.clasificacion}</span>}
                 {movie.duracion      && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Duración:</b> {movie.duracion}</span>}
                 {movie.director      && <span style={{ color: 'rgba(255,255,255,0.8)' }}><b>Dir:</b> {movie.director}</span>}
@@ -623,14 +684,18 @@ function VerPelicula({ movie, onClose }) {
   )
 }
 
-// ─── MovieCard ─────────────────────────────────────────────────────────────────
+VerPelicula.propTypes = {
+  movie: PropTypes.object,
+  onClose: PropTypes.func.isRequired,
+}
+
 function MovieCard({ movie, onEdit, onVer, onEliminar }) {
   return (
     <div className="movie-card">
-      <div style={{ aspectRatio: '2/3', background: '#1C2566', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ aspectRatio: '2/3', background: '#1C2566', position: 'relative', overflow: 'hidden'}}>
         {movie.poster
           ? <img src={movie.poster} alt={movie.titulo} onError={e => e.target.style.display='none'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 4h16M8 4v4m8-4v4"/>
               </svg>
@@ -671,7 +736,13 @@ function MovieCard({ movie, onEdit, onVer, onEliminar }) {
   )
 }
 
-// ─── Pagination ────────────────────────────────────────────────────────────────
+MovieCard.propTypes = {
+  movie: PropTypes.object,
+  onEdit: PropTypes.func,
+  onVer: PropTypes.func,
+  onEliminar: PropTypes.func,
+}
+
 function Pagination({ total, page, perPage, onPage }) {
   const pages = Math.ceil(total / perPage)
   const start = (page - 1) * perPage + 1
@@ -690,7 +761,13 @@ function Pagination({ total, page, perPage, onPage }) {
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+Pagination.propTypes = {
+  total: PropTypes.number,
+  page: PropTypes.number,
+  perPage: PropTypes.number,
+  onPage: PropTypes.func,
+}
+
 export default function CatalogoPeliculas() {
   const [movies, setMovies]             = useState([])
   const [loading, setLoading]           = useState(true)
@@ -850,10 +927,9 @@ export default function CatalogoPeliculas() {
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
   const enrichedPaginated = paginated.map(m => ({
     ...m,
-    ...(detailsCache[m.id] || {}),
+    ...(detailsCache[m.id]),
   }))
 
-  // Enrich current page movies with director/actor data from details endpoint
   useEffect(() => {
     const idsToFetch = paginated
       .filter(m => m.id && !fetchedIds.current.has(m.id))
@@ -882,6 +958,46 @@ export default function CatalogoPeliculas() {
     doFetch()
   }, [paginated])
 
+  const handleEditMovie = async (m) => {
+    try {
+      const details = await api.details(m.id)
+      const generoIds = (details.generos || []).map(g => {
+        const nombre = g.nombre_genero ?? g.nombre ?? g
+        const found = genres.find(gen => (gen.nombre_genero || gen.nombre) === nombre)
+        return found ? found.id_genero : null
+      }).filter(Boolean)
+      const parsed = backendToFrontend(details)
+      setModalEdit({
+        ...parsed,
+        id: m.id,
+        generos: generoIds,
+        director: parsed.director,
+        elenco: parsed.elenco || m.elenco || '',
+      })
+    } catch (_e) {
+      setModalEdit({ ...m })
+      console.warn('Error loading movie details, using cached data:', _e)
+    }
+  }
+
+  function renderContenido() {
+    if (loading) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>Cargando películas...</div>
+    if (enrichedPaginated.length === 0) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>No se encontraron películas.</div>
+    return (
+      <div className="movies-grid">
+        {enrichedPaginated.map(m => (
+          <MovieCard
+            key={m.id}
+            movie={m}
+            onEdit={() => handleEditMovie(m)}
+            onVer={() => handleVer(m)}
+            onEliminar={() => setModalDel(m)}
+          />
+        ))}
+      </div>
+    )
+  }
+
   const dropStyle = {
     background: '#fff', border: '1px solid #D1D5DC', borderRadius: 10,
     padding: '10px 36px 10px 14px', fontSize: 14, color: '#374151',
@@ -890,12 +1006,16 @@ export default function CatalogoPeliculas() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#121212', margin: 0 }}>Catálogo de Películas</h1>
           <p style={{ fontSize: 14, color: '#6B7280', margin: '5px 0 0' }}>
-            {loading ? 'Cargando...' : `${filtered.length} película${filtered.length !== 1 ? 's' : ''} encontrada${filtered.length !== 1 ? 's' : ''}`}
+            {(() => {
+              if (loading) return 'Cargando...'
+              const count = filtered.length
+              const s = count === 1 ? '' : 's'
+              return `${count} película${s} encontrada${s}`
+            })()}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -912,7 +1032,6 @@ export default function CatalogoPeliculas() {
         </div>
       </div>
 
-      {/* Filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }}><Icon d={ICON_SEARCH} size={16} /></span>
@@ -953,44 +1072,7 @@ export default function CatalogoPeliculas() {
         )}
       </div>
 
-      {/* Grid */}
-      {loading
-        ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>Cargando películas...</div>
-        : enrichedPaginated.length === 0
-        ? <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9CA3AF', fontSize: 15 }}>No se encontraron películas.</div>
-        : <div className="movies-grid">
-            {enrichedPaginated.map(m => (
-              <MovieCard
-                key={m.id}
-                movie={m}
-                onEdit={async () => {
-                  try {
-                    const details = await api.details(m.id)
-                    const generoIds = (details.generos || []).map(g => {
-                      const nombre = g.nombre_genero ?? g.nombre ?? g
-                      const found = genres.find(gen => (gen.nombre_genero || gen.nombre) === nombre)
-                      return found ? found.id_genero : null
-                    }).filter(Boolean)
-                    const parsed = backendToFrontend(details)
-                    setModalEdit({
-                      ...parsed,
-                      id: m.id,
-                      generos: generoIds,
-                      director: parsed.director,
-                      elenco: parsed.elenco || m.elenco || '',
-                    })
-                  } catch (e) {
-                    setModalEdit({
-                      ...m,
-                    })
-                  }
-                }}
-                onVer={() => handleVer(m)}
-                onEliminar={() => setModalDel(m)}
-              />
-            ))}
-          </div>
-      }
+      {renderContenido()}
 
       {!loading && filtered.length > PER_PAGE && (
         <Pagination total={filtered.length} page={page} perPage={PER_PAGE} onPage={setPage} />

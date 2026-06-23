@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
-
-const AuthContext = createContext(null)
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import PropTypes from 'prop-types'
+import { AuthContext } from './AuthContext.js'
 
 const USER_KEY = 'filmate_user'
 
@@ -30,7 +30,15 @@ export function AuthProvider({ children }) {
       }
       const data = await res.json()
       const userData = data.user
+
+      if (!userData.roles?.includes(1)) {
+        throw new Error('Acceso denegado. Solo los administradores pueden ingresar al panel.')
+      }
+
       localStorage.setItem(USER_KEY, JSON.stringify(userData))
+      if (data.access_token) {
+        localStorage.setItem('filmate_token', data.access_token)
+      }
       setUser(userData)
       return userData
     } finally {
@@ -40,6 +48,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('filmate_token')
     setUser(null)
   }, [])
 
@@ -48,18 +57,20 @@ export function AuthProvider({ children }) {
       setVerifying(false)
       return
     }
-    fetch('/api/admin/rooms/?limit=1', {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const token = localStorage.getItem('filmate_token')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    fetch('/api/admin/rooms/?limit=1', { headers })
       .then(res => {
         if (!res.ok) throw new Error('Sesión inválida')
       })
       .catch(() => {
         localStorage.removeItem(USER_KEY)
+        localStorage.removeItem('filmate_token')
         setUser(null)
       })
       .finally(() => setVerifying(false))
-  }, [])
+  }, [user])
 
   const value = useMemo(() => ({ user, login, logout, loading, verifying }), [user, login, logout, loading, verifying])
 
@@ -70,8 +81,6 @@ export function AuthProvider({ children }) {
   )
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth debe usarse dentro de AuthProvider')
-  return ctx
+AuthProvider.propTypes = {
+  children: PropTypes.node,
 }

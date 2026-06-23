@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
+import { useAuth } from '../context/useAuth.js'
 
 const CSS = `
 .lp-root {
@@ -105,8 +105,9 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             {error && <div className="lp-error">{error}</div>}
             <div className="lp-field">
-              <label className="lp-label">Correo electrónico</label>
+              <label className="lp-label" htmlFor="correo">Correo electrónico</label>
               <input
+                id="correo"
                 className="lp-input"
                 type="email"
                 placeholder="correo@ejemplo.com"
@@ -116,8 +117,9 @@ export default function LoginPage() {
               />
             </div>
             <div className="lp-field">
-              <label className="lp-label">Contraseña</label>
+              <label className="lp-label" htmlFor="contrasena">Contraseña</label>
               <input
+                id="contrasena"
                 className="lp-input"
                 type="password"
                 placeholder="••••••••"

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import PropTypes from 'prop-types'
 
 const VENTAS_BASE        = '/api/admin/transactions'
 const TICKETS_BASE       = '/api/tickets'
@@ -27,14 +28,14 @@ function detectTipo(tx) {
 }
 
 function detectTipoFromListItem(tx) {
-  const monto = parseFloat(tx.monto_total || 0)
+  const monto = Number.parseFloat(tx.monto_total || 0)
   if (monto > 50) return 'Entrada + Dulcería'
   if (monto > 0)  return 'Solo Entrada'
   return 'Solo Entrada'
 }
 
 function fmtMoney(n) {
-  return `S/ ${parseFloat(n).toFixed(2)}`
+  return `S/ ${Number.parseFloat(n).toFixed(2)}`
 }
 
 function fmtDate(str, opts = {}) {
@@ -63,6 +64,10 @@ function DownloadIcon({ size = 16, color = 'currentColor' }) {
     </svg>
   )
 }
+DownloadIcon.propTypes = {
+  size: PropTypes.number,
+  color: PropTypes.string,
+}
 
 function EstadoBadge({ estado }) {
   const estados = estado || ''
@@ -84,9 +89,10 @@ function EstadoBadge({ estado }) {
       background: s.bg, color: s.text,
       padding: '3px 12px', borderRadius: 999,
       fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
-    }}>{estados}</span>
+    }}>{estados}    </span>
   )
 }
+EstadoBadge.propTypes = { estado: PropTypes.string }
 
 function TipoBadge({ tipo }) {
   const map = {
@@ -101,6 +107,7 @@ function TipoBadge({ tipo }) {
     </span>
   )
 }
+TipoBadge.propTypes = { tipo: PropTypes.string }
 
 function SelectFilter({ label, options, value, onChange, minWidth = 130 }) {
   return (
@@ -116,6 +123,13 @@ function SelectFilter({ label, options, value, onChange, minWidth = 130 }) {
     </div>
   )
 }
+SelectFilter.propTypes = {
+  label: PropTypes.string.isRequired,
+  options: PropTypes.array.isRequired,
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+  minWidth: PropTypes.number,
+}
 
 function SearchInput({ label, placeholder, value, onChange }) {
   return (
@@ -125,6 +139,12 @@ function SearchInput({ label, placeholder, value, onChange }) {
         style={{ background: '#fff', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 12px', fontSize: 14, color: '#4A5565', outline: 'none' }} />
     </div>
   )
+}
+SearchInput.propTypes = {
+  label: PropTypes.string.isRequired,
+  placeholder: PropTypes.string,
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
 }
 
 function EmptyTableMessage({ colSpan = 10, message = 'Sin registros para mostrar.' }) {
@@ -141,13 +161,22 @@ function EmptyTableMessage({ colSpan = 10, message = 'Sin registros para mostrar
     </tr>
   )
 }
+EmptyTableMessage.propTypes = {
+  colSpan: PropTypes.number,
+  message: PropTypes.string,
+}
 
 function LoadingRow({ colSpan = 10 }) {
   return <tr><td colSpan={colSpan} style={{ padding: '48px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>Cargando…</td></tr>
 }
+LoadingRow.propTypes = { colSpan: PropTypes.number }
 
 function ErrorRow({ colSpan = 10, message }) {
   return <tr><td colSpan={colSpan} style={{ padding: '48px 20px', textAlign: 'center', color: '#EF4444', fontSize: 14 }}>⚠️ {message}</td></tr>
+}
+ErrorRow.propTypes = {
+  colSpan: PropTypes.number,
+  message: PropTypes.string,
 }
 
 function PaginationBar({ page, totalPages, onPrev, onNext }) {
@@ -161,6 +190,12 @@ function PaginationBar({ page, totalPages, onPrev, onNext }) {
     </div>
   )
 }
+PaginationBar.propTypes = {
+  page: PropTypes.number.isRequired,
+  totalPages: PropTypes.number.isRequired,
+  onPrev: PropTypes.func.isRequired,
+  onNext: PropTypes.func.isRequired,
+}
 
 function DetalleCard({ children, style }) {
   return (
@@ -169,6 +204,10 @@ function DetalleCard({ children, style }) {
     </div>
   )
 }
+DetalleCard.propTypes = {
+  children: PropTypes.node,
+  style: PropTypes.object,
+}
 
 function DetalleSectionTitle({ children }) {
   return (
@@ -176,6 +215,9 @@ function DetalleSectionTitle({ children }) {
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#121212' }}>{children}</h3>
     </div>
   )
+}
+DetalleSectionTitle.propTypes = {
+  children: PropTypes.node,
 }
 
 function DetalleInfoGrid({ fields }) {
@@ -189,6 +231,9 @@ function DetalleInfoGrid({ fields }) {
       ))}
     </div>
   )
+}
+DetalleInfoGrid.propTypes = {
+  fields: PropTypes.array.isRequired,
 }
 
 const FECHA_OPTIONS = [
@@ -209,7 +254,6 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
   const [estado,     setEstado]     = useState('')
   const [fecha,      setFecha]      = useState('')
   const [tipo,       setTipo]       = useState('')
-  const [buscarTemp, setBuscarTemp] = useState('')
   const [buscar,     setBuscar]     = useState('')
   const [page,       setPage]       = useState(1)
   const [data,       setData]       = useState(null)
@@ -231,13 +275,12 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const hayFiltrosActivos = estado || fecha || tipo || buscar || buscarTemp
+  const hayFiltrosActivos = estado || fecha || tipo || buscar
 
   const handleLimpiarFiltros = () => {
     setEstado('')
     setFecha('')
     setTipo('')
-    setBuscarTemp('')
     setBuscar('')
     setPage(1)
   }
@@ -259,6 +302,36 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
     : transactions
   const getMonto = (tx) => computedTotals[tx.id_transaccion] ?? tx.monto_total
 
+  let tbodyContent
+  if (loading) {
+    tbodyContent = <LoadingRow colSpan={9} />
+  } else if (error) {
+    tbodyContent = <ErrorRow colSpan={9} message={error} />
+  } else if (filtered.length === 0) {
+    tbodyContent = <EmptyTableMessage colSpan={9} />
+  } else {
+    tbodyContent = filtered.map(tx => (
+      <tr key={tx.id_transaccion} style={{ borderTop: '1px solid #F3F4F6' }}>
+        <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>
+          {tx.transaccion_id || `#${tx.id_transaccion}`}
+        </td>
+        <td style={{ padding: '10px 14px', color: '#4A5565', whiteSpace: 'nowrap' }}>{fmtDate(tx.fecha_transaccion)}</td>
+        <td style={{ padding: '10px 14px', color: '#121212' }}>{tx.cliente || tx.usuario_nombre || '—'}</td>
+        <td style={{ padding: '10px 14px', color: '#4A5565', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.pelicula || tx.pelicula_titulo || '—'}</td>
+        <td style={{ padding: '10px 14px', color: '#4A5565' }}>{tx.sala || tx.sala_nombre || '—'}</td>
+        <td style={{ padding: '10px 14px' }}><TipoBadge tipo={detectTipoFromListItem(tx)} /></td>
+        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{getMonto(tx) == null ? '—' : fmtMoney(getMonto(tx))}</td>
+        <td style={{ padding: '10px 14px' }}><EstadoBadge estado={tx.estado_pago} /></td>
+        <td style={{ padding: '10px 14px' }}>
+          <button onClick={() => onSelectTransaction(tx.id_transaccion)}
+            style={{ background: '#EEF2FF', color: '#283593', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Ver detalle
+          </button>
+        </td>
+      </tr>
+    ))
+  }
+
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
@@ -279,8 +352,8 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
           <SearchInput
             label="Buscar"
             placeholder="ID transacción, cliente, película"
-            value={buscarTemp}
-            onChange={setBuscarTemp}
+            value={buscar}
+            onChange={v => { setBuscar(v); setPage(1) }}
           />
           <SelectFilter
             label="Estado"
@@ -303,26 +376,15 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
             options={FECHA_OPTIONS}
             value={fecha} onChange={v => { setFecha(v); setPage(1) }}
           />
-          <button
-            onClick={() => { setBuscar(buscarTemp); setPage(1) }}
-            style={{
-              background: '#283593', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '9px 18px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-            }}>
-            Aplicar filtros
-          </button>
           {hayFiltrosActivos && (
             <button
               onClick={handleLimpiarFiltros}
               style={{
-                background: '#fff', color: '#6B7280',
-                border: '1px solid #D1D5DC', borderRadius: 8,
-                padding: '9px 18px', fontSize: 14, fontWeight: 600,
+                padding: '9px 18px', borderRadius: 10, border: '1px solid #FECACA',
+                background: '#FEF2F2', color: '#EF4444', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              ✕ Limpiar filtros
+              Limpiar
             </button>
           )}
         </div>
@@ -343,29 +405,7 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
               </tr>
             </thead>
             <tbody>
-              {loading ? <LoadingRow colSpan={9} /> :
-               error   ? <ErrorRow  colSpan={9} message={error} /> :
-               filtered.length === 0 ? <EmptyTableMessage colSpan={9} /> :
-               filtered.map(tx => (
-                <tr key={tx.id_transaccion} style={{ borderTop: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>
-                    {tx.transaccion_id || `#${tx.id_transaccion}`}
-                  </td>
-                  <td style={{ padding: '10px 14px', color: '#4A5565', whiteSpace: 'nowrap' }}>{fmtDate(tx.fecha_transaccion)}</td>
-                  <td style={{ padding: '10px 14px', color: '#121212' }}>{tx.cliente || tx.usuario_nombre || '—'}</td>
-                  <td style={{ padding: '10px 14px', color: '#4A5565', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.pelicula || tx.pelicula_titulo || '—'}</td>
-                  <td style={{ padding: '10px 14px', color: '#4A5565' }}>{tx.sala || tx.sala_nombre || '—'}</td>
-                  <td style={{ padding: '10px 14px' }}><TipoBadge tipo={detectTipoFromListItem(tx)} /></td>
-                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{getMonto(tx) != null ? fmtMoney(getMonto(tx)) : '—'}</td>
-                  <td style={{ padding: '10px 14px' }}><EstadoBadge estado={tx.estado_pago} /></td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <button onClick={() => onSelectTransaction(tx.id_transaccion)}
-                      style={{ background: '#EEF2FF', color: '#283593', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      Ver detalle
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {tbodyContent}
             </tbody>
           </table>
         </div>
@@ -374,6 +414,10 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
     </div>
   )
 }
+TabHistorial.propTypes = {
+  onSelectTransaction: PropTypes.func.isRequired,
+  computedTotals: PropTypes.object,
+}
 
 function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   const [motivo,       setMotivo]       = useState('')
@@ -381,8 +425,12 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   const [error,        setError]        = useState(null)
   const [tipoR,        setTipoR]        = useState('Reembolso total')
   const [montoR,       setMontoR]       = useState(montoTotal)
+  const [touched,      setTouched]      = useState(false)
+
+  const motivoError = touched && !motivo.trim()
 
   const handleSubmit = async () => {
+    setTouched(true)
     if (!motivo.trim()) { setError('El motivo es obligatorio'); return }
     setSaving(true); setError(null)
     try {
@@ -391,7 +439,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
         body: JSON.stringify({
           id_transaccion: transaccionId,
           motivo: motivo.trim(),
-          monto_reembolsado: parseFloat(montoR),
+          monto_reembolsado: Number.parseFloat(montoR),
           tipo_reembolso: tipoR,
         }),
       })
@@ -402,32 +450,36 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
+    <button type="button"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Solicitar Reembolso</h3>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Motivo *</label>
-          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3}
-            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+          <label htmlFor="reembolso-motivo" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Motivo *</label>
+          <textarea id="reembolso-motivo" value={motivo} onChange={e => { setMotivo(e.target.value); if (touched) { setTouched(false) }; if (error === 'El motivo es obligatorio') { setError(null) } }} rows={3}
+            style={{ width: '100%', border: motivoError ? '1px solid #EF4444' : '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
             placeholder="Describa el motivo del reembolso..." />
+          {motivoError && <p style={{ margin: '4px 0 0', fontSize: 12, color: '#EF4444' }}>Campo obligatorio</p>}
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Tipo de reembolso *</label>
-          <select value={tipoR} onChange={e => { setTipoR(e.target.value); if (e.target.value === 'Sin reembolso') setMontoR(0) }}
+          <label htmlFor="reembolso-tipo" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Tipo de reembolso *</label>
+          <select id="reembolso-tipo" value={tipoR} onChange={e => { setTipoR(e.target.value); if (e.target.value === 'Reembolso total') setMontoR(montoTotal) }}
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
             <option value="Reembolso total">Reembolso total</option>
             <option value="Reembolso parcial">Reembolso parcial</option>
-            <option value="Sin reembolso">Sin reembolso</option>
           </select>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Monto a reembolsar *</label>
-          <input type="number" step="0.01" value={montoR} onChange={e => setMontoR(e.target.value)}
-            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          <label htmlFor="reembolso-monto" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Monto a reembolsar *</label>
+          <input id="reembolso-monto" type="number" step="0.01" value={montoR}
+            disabled={tipoR === 'Reembolso total'}
+            onChange={e => setMontoR(e.target.value)}
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box', background: tipoR === 'Reembolso total' ? '#F3F4F6' : '#fff', cursor: tipoR === 'Reembolso total' ? 'not-allowed' : 'text' }} />
         </div>
 
         {error && (
@@ -438,14 +490,20 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button onClick={onClose} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving || !motivo.trim()}
+          <button onClick={handleSubmit} disabled={saving}
             style={{ padding: '8px 24px', border: 'none', borderRadius: 8, background: saving ? '#9CA3AF' : '#C2410C', color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
             {saving ? 'Enviando…' : 'Solicitar Reembolso'}
           </button>
         </div>
       </div>
-    </div>
+    </button>
   )
+}
+ReembolsoModal.propTypes = {
+  transaccionId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  montoTotal: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onClose: PropTypes.func.isRequired,
+  onCreated: PropTypes.func.isRequired,
 }
 
 function ResolveModal({ solicitud, onClose, onResolved }) {
@@ -471,8 +529,10 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
+    <button type="button"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Resolver Solicitud #{solicitud.id_reembolso}</h3>
         <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>
@@ -485,8 +545,8 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
         )}
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Decisión *</label>
-          <select value={estadoRes} onChange={e => setEstadoRes(e.target.value)}
+          <label htmlFor="resolve-decision" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Decisión *</label>
+          <select id="resolve-decision" value={estadoRes} onChange={e => setEstadoRes(e.target.value)}
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
             <option value="Aprobada">Aprobar</option>
             <option value="Rechazada">Rechazar</option>
@@ -494,8 +554,8 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Comentario de resolución</label>
-          <textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={3}
+          <label htmlFor="resolve-comentario" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Comentario de resolución</label>
+          <textarea id="resolve-comentario" value={comentario} onChange={e => setComentario(e.target.value)} rows={3}
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
         </div>
 
@@ -513,8 +573,22 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
           </button>
         </div>
       </div>
-    </div>
+    </button>
   )
+}
+ResolveModal.propTypes = {
+  solicitud: PropTypes.shape({
+    id_reembolso: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    id_transaccion: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    monto_reembolsado: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    tipo_reembolso: PropTypes.string,
+    motivo: PropTypes.string,
+    estado_solicitud: PropTypes.string,
+    fecha_solicitud: PropTypes.string,
+    comentario_administrador: PropTypes.string,
+  }).isRequired,
+  onClose: PropTypes.func.isRequired,
+  onResolved: PropTypes.func.isRequired,
 }
 
 function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
@@ -525,6 +599,8 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
   const [showRefund,     setShowRefund]     = useState(false)
   const [resolveTarget,  setResolveTarget]  = useState(null)
   const [refreshKey,     setRefreshKey]     = useState(0)
+  const onUpdateTotalRef = useRef(onUpdateTotal)
+  useEffect(() => { onUpdateTotalRef.current = onUpdateTotal }, [onUpdateTotal])
 
   useEffect(() => {
     if (!reservationId) return
@@ -541,7 +617,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
         }))
       }
       setData(txData)
-      if (onUpdateTotal) onUpdateTotal(reservationId, parseFloat(txData.monto_total || 0))
+      if (onUpdateTotalRef.current) onUpdateTotalRef.current(reservationId, Number.parseFloat(txData.monto_total || 0))
       setSolicitudes((sols || []).filter(s => s.id_transaccion === reservationId))
     }).catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -587,7 +663,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
       {showRefund && (
         <ReembolsoModal
           transaccionId={reservationId}
-          montoTotal={parseFloat(data.monto_total || 0)}
+          montoTotal={Number.parseFloat(data.monto_total || 0)}
           onClose={() => setShowRefund(false)}
           onCreated={refreshSolicitudes}
         />
@@ -663,7 +739,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
           <DetalleCard>
             <DetalleSectionTitle>Productos Adquiridos</DetalleSectionTitle>
             {(data.boletos || data.detalles_asientos || []).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
+              <div key={d.asiento || d.codigo_qr_token || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>Asiento {d.asiento || `${d.fila || ''}${d.columna || ''}` || '—'}</p>
                   <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>{sala} · Entrada</p>
@@ -675,7 +751,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
               </div>
             ))}
             {(data.snacks || data.detalles_confiteria || []).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
+              <div key={d.producto || d.nombre_producto || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>{d.producto || d.nombre_producto || `Producto #${d.id_producto || i}`} × {d.cantidad}</p>
                   <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>Dulcería</p>
@@ -692,11 +768,20 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
             <DetalleCard>
               <DetalleSectionTitle>Solicitudes de Reembolso</DetalleSectionTitle>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {solicitudes.map(sol => (
+                {solicitudes.map(sol => {
+                  let badgeEstado
+                  if (sol.estado_solicitud === 'Aprobada') {
+                    badgeEstado = 'Aprobada'
+                  } else if (sol.estado_solicitud === 'Rechazada') {
+                    badgeEstado = 'Rechazada'
+  } else {
+    badgeEstado = 'Evaluacion'
+  }
+                  return (
                   <div key={sol.id_reembolso} style={{ padding: '12px 14px', border: '1px solid #E5E7EB', borderRadius: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span style={{ fontWeight: 700, fontSize: 13, color: '#283593' }}>#{sol.id_reembolso}</span>
-                      <EstadoBadge estado={sol.estado_solicitud === 'Aprobada' ? 'Aprobada' : sol.estado_solicitud === 'Rechazada' ? 'Rechazada' : 'Evaluacion'} />
+                      <EstadoBadge estado={badgeEstado} />
                     </div>
                     <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>
                       {fmtDate(sol.fecha_solicitud)} · {sol.tipo_reembolso} · {fmtMoney(sol.monto_reembolsado)}
@@ -718,7 +803,8 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
                       </button>
                     )}
                   </div>
-                ))}
+                )
+              })}
               </div>
             </DetalleCard>
           )}
@@ -728,14 +814,14 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
           <DetalleCard>
             <DetalleSectionTitle>Resumen de Pago</DetalleSectionTitle>
             <div style={{ fontSize: 14 }}>
-              {parseFloat(data.monto_boletos || 0) > 0 && (
+              {Number.parseFloat(data.monto_boletos || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid #F3F4F6' }}>
                   <span style={{ color: '#6B7280' }}>Entradas</span>
                   <span style={{ fontWeight: 500, color: '#121212' }}>{fmtMoney(data.monto_boletos)}</span>
                 </div>
               )}
 
-              {parseFloat(data.monto_confiteria || 0) > 0 && (
+              {Number.parseFloat(data.monto_confiteria || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
                   <span style={{ color: '#6B7280' }}>Dulcería</span>
                   <span style={{ fontWeight: 500, color: '#121212' }}>{fmtMoney(data.monto_confiteria)}</span>
@@ -754,7 +840,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
               {historialTx.map((h, i) => {
                 const d = h.fecha ? new Date(h.fecha) : null
                 return (
-                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div key={h.label} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
                       <span style={{ fontSize: 12, color: '#008236', fontWeight: 700 }}>✓</span>
                     </div>
@@ -776,6 +862,11 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
     </div>
   )
 }
+TabDetalle.propTypes = {
+  reservationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onBack: PropTypes.func,
+  onUpdateTotal: PropTypes.func,
+}
 
 const SOLICITUD_ESTADOS = [
   { label: 'Todos los estados',   value: '' },
@@ -787,11 +878,9 @@ const SOLICITUD_ESTADOS = [
 function TabDevoluciones() {
   const [estadoFiltro, setEstadoFiltro] = useState('')
   const [fecha,        setFecha]        = useState('')
-  const [buscarTemp,   setBuscarTemp]   = useState('')
   const [buscar,       setBuscar]       = useState('')
   const [page,         setPage]         = useState(1)
   const [data,         setData]         = useState(null)
-  const [metrics,      setMetrics]      = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
   const [resolveTarget, setResolveTarget] = useState(null)
@@ -804,14 +893,11 @@ function TabDevoluciones() {
     setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ page: 1, limit: 100 })
-      const [sols, met] = await Promise.all([
-        apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`),
-        apiFetch(`${ADMIN_REEMBOLSOS}/metricas`).catch(() => ({})),
-      ])
+      const sols = await apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`)
       setData(sols || [])
-      setMetrics(met || {})
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -822,7 +908,6 @@ function TabDevoluciones() {
   const handleLimpiarFiltros = () => {
     setEstadoFiltro('')
     setFecha('')
-    setBuscarTemp('')
     setBuscar('')
     setPage(1)
   }
@@ -837,7 +922,7 @@ function TabDevoluciones() {
     }
     if (fecha && s.fecha_solicitud) {
       const t = new Date(s.fecha_solicitud).getTime()
-      if (isNaN(t)) return true
+      if (Number.isNaN(t)) return true
       const dias = { '1d': 1, '7d': 7, '30d': 30 }[fecha]
       if (dias && (now - t) > dias * 86400000) return false
     }
@@ -847,12 +932,55 @@ function TabDevoluciones() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
   const paginated = filtered.slice((page - 1) * 10, page * 10)
 
+  const localEval  = allSolicitudes.filter(s => s.estado_solicitud === 'Evaluacion').length
+  const localAprob = allSolicitudes.filter(s => s.estado_solicitud === 'Aprobada').length
+  const localMonto = allSolicitudes
+    .filter(s => s.estado_solicitud === 'Aprobada')
+    .reduce((sum, s) => sum + Number.parseFloat(s.monto_reembolsado || 0), 0)
+
   const metricCards = [
     { label: 'Solicitudes Totales', value: allSolicitudes.length,             sub: 'Todas las solicitudes', iconBg: '#EEF2FF', iconColor: '#283593', icon: '↺' },
-    { label: 'Evaluacion',          value: metrics?.evaluacion ?? '—',        sub: 'Requieren revisión',    iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
-    { label: 'Aprobadas',           value: metrics?.aprobadas ?? '—',         sub: 'Reembolso procesado',   iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
-    { label: 'Monto Devuelto',      value: metrics?.monto_total_aprobado != null ? fmtMoney(metrics.monto_total_aprobado) : '—', sub: 'Total aprobado', iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
+    { label: 'Evaluacion',          value: localEval,                         sub: 'Requieren revisión',    iconBg: '#FEF9C3', iconColor: '#B45309', icon: '⏱' },
+    { label: 'Aprobadas',           value: localAprob,                        sub: 'Reembolso procesado',   iconBg: '#DCFCE7', iconColor: '#008236', icon: '✓' },
+    { label: 'Monto Devuelto',      value: localMonto > 0 ? fmtMoney(localMonto) : '—', sub: 'Total aprobado', iconBg: '#EEF2FF', iconColor: '#283593', icon: '$' },
   ]
+
+  let tbodyContent
+  if (loading) {
+    tbodyContent = <LoadingRow colSpan={8} />
+  } else if (error) {
+    tbodyContent = <ErrorRow colSpan={8} message={error} />
+  } else if (paginated.length === 0) {
+    tbodyContent = <EmptyTableMessage colSpan={8} message="No hay solicitudes de reembolso para mostrar." />
+  } else {
+    tbodyContent = paginated.map(sol => (
+      <tr key={sol.id_reembolso} style={{ borderTop: '1px solid #F3F4F6' }}>
+        <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>#{sol.id_reembolso}</td>
+        <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#4A5565' }}>#{sol.id_transaccion}</td>
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#4A5565' }}>{fmtDate(sol.fecha_solicitud)}</td>
+        <td style={{ padding: '10px 14px', color: '#121212', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sol.motivo || '—'}
+        </td>
+        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{fmtMoney(sol.monto_reembolsado)}</td>
+        <td style={{ padding: '10px 14px', color: '#4A5565', fontSize: 12 }}>{sol.tipo_reembolso}</td>
+        <td style={{ padding: '10px 14px' }}><EstadoBadge estado={sol.estado_solicitud} /></td>
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setDetailTarget(sol)}
+              style={{ padding: '4px 10px', border: '1px solid #D1D5DC', borderRadius: 6, background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#4A5565' }}>
+              Detalle
+            </button>
+            {sol.estado_solicitud === 'Evaluacion' && (
+              <button onClick={() => setResolveTarget(sol)}
+                style={{ padding: '4px 14px', border: '1px solid #283593', borderRadius: 6, background: '#EEF2FF', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#283593' }}>
+                Resolver
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    ))
+  }
 
   return (
     <div>
@@ -864,8 +992,10 @@ function TabDevoluciones() {
         />
       )}
       {detailTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-          onClick={e => e.target === e.currentTarget && setDetailTarget(null)}>
+        <button type="button"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+          onClick={e => e.target === e.currentTarget && setDetailTarget(null)}
+          onKeyDown={e => { if (e.key === 'Escape') setDetailTarget(null) }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Detalle de Solicitud #{detailTarget.id_reembolso}</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 16 }}>
@@ -902,7 +1032,7 @@ function TabDevoluciones() {
               <button onClick={() => setDetailTarget(null)} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
@@ -921,8 +1051,8 @@ function TabDevoluciones() {
           <SearchInput
             label="Buscar"
             placeholder="#ID, transacción, motivo"
-            value={buscarTemp}
-            onChange={setBuscarTemp}
+            value={buscar}
+            onChange={v => { setBuscar(v); setPage(1) }}
           />
           <SelectFilter
             label="Estado"
@@ -934,26 +1064,15 @@ function TabDevoluciones() {
             options={FECHA_OPTIONS}
             value={fecha} onChange={v => { setFecha(v); setPage(1) }}
           />
-          <button
-            onClick={() => { setBuscar(buscarTemp); setPage(1) }}
-            style={{
-              background: '#283593', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '9px 18px', fontSize: 14,
-              fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-            }}>
-            Aplicar filtros
-          </button>
           {hayFiltrosActivos && (
             <button
               onClick={handleLimpiarFiltros}
               style={{
-                background: '#fff', color: '#6B7280',
-                border: '1px solid #D1D5DC', borderRadius: 8,
-                padding: '9px 18px', fontSize: 14, fontWeight: 600,
+                padding: '9px 18px', borderRadius: 10, border: '1px solid #FECACA',
+                background: '#FEF2F2', color: '#EF4444', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', alignSelf: 'flex-end', height: 38,
-                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              ✕ Limpiar filtros
+              Limpiar
             </button>
           )}
         </div>
@@ -974,36 +1093,7 @@ function TabDevoluciones() {
               </tr>
             </thead>
             <tbody>
-              {loading ? <LoadingRow colSpan={8} /> :
-               error   ? <ErrorRow  colSpan={8} message={error} /> :
-               paginated.length === 0 ? <EmptyTableMessage colSpan={8} message="No hay solicitudes de reembolso para mostrar." /> :
-               paginated.map(sol => (
-                <tr key={sol.id_reembolso} style={{ borderTop: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>#{sol.id_reembolso}</td>
-                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#4A5565' }}>#{sol.id_transaccion}</td>
-                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#4A5565' }}>{fmtDate(sol.fecha_solicitud)}</td>
-                  <td style={{ padding: '10px 14px', color: '#121212', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {sol.motivo || '—'}
-                  </td>
-                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#121212' }}>{fmtMoney(sol.monto_reembolsado)}</td>
-                  <td style={{ padding: '10px 14px', color: '#4A5565', fontSize: 12 }}>{sol.tipo_reembolso}</td>
-                  <td style={{ padding: '10px 14px' }}><EstadoBadge estado={sol.estado_solicitud} /></td>
-                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setDetailTarget(sol)}
-                        style={{ padding: '4px 10px', border: '1px solid #D1D5DC', borderRadius: 6, background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#4A5565' }}>
-                        Detalle
-                      </button>
-                      {sol.estado_solicitud === 'Evaluacion' && (
-                        <button onClick={() => setResolveTarget(sol)}
-                          style={{ padding: '4px 14px', border: '1px solid #283593', borderRadius: 6, background: '#EEF2FF', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#283593' }}>
-                          Resolver
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {tbodyContent}
             </tbody>
           </table>
         </div>
@@ -1102,12 +1192,20 @@ function TabValidacion() {
       }
 
       setResultadoPersist(res)
+      let resultadoLabel
+      if (res.valido) {
+        resultadoLabel = 'Válida'
+      } else if (res.estado?.includes('Ya')) {
+        resultadoLabel = 'Ya Usada'
+      } else {
+        resultadoLabel = 'Inválida'
+      }
       setLogEntriesPersist(prev => [{
         ticket_id: codigo,
         hora:      new Date().toLocaleTimeString('es-PE'),
         cliente:   res.cliente  || '—',
         asiento:   res.asiento  || '—',
-        resultado: res.valido ? 'Válida' : (res.estado?.includes('Ya') ? 'Ya Usada' : 'Inválida'),
+        resultado: resultadoLabel,
       }, ...prev].slice(0, 200))
       setLogPage(1)
     } catch (e) { setError(e.message) }
@@ -1177,7 +1275,7 @@ function TabValidacion() {
           <h3 style={{ fontSize: 17, fontWeight: 700, color: '#121212', margin: 0 }}>Log de validaciones</h3>
           <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0' }}>
             Últimas entradas registradas (persiste al recargar)
-            {logEntries.length > 0 && ` · ${logEntries.length} registro${logEntries.length !== 1 ? 's' : ''}`}
+            {logEntries.length > 0 && ` · ${logEntries.length} registro${logEntries.length === 1 ? '' : 's'}`}
           </p>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -1193,7 +1291,7 @@ function TabValidacion() {
               {logEntries.length === 0
                 ? <EmptyTableMessage colSpan={5} message="Aún no se ha validado ninguna entrada." />
                 : logPaginado.map((e, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid #F3F4F6' }}>
+                  <tr key={e.ticket_id || e.hora} style={{ borderTop: '1px solid #F3F4F6' }}>
                     <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#283593' }}>{e.ticket_id}</td>
                     <td style={{ padding: '10px 14px' }}>{e.hora}</td>
                     <td style={{ padding: '10px 14px' }}>{e.cliente}</td>
@@ -1234,7 +1332,7 @@ export default function VentasYTickets({ initialTxnId }) {
       setSelectedTransactionId(initialTxnId)
       setTabActiva(1)
     }
-  }, [])
+  }, [initialTxnId])
 
   const handleSelectTransaction = (id) => {
     setSelectedTransactionId(id)
@@ -1273,4 +1371,8 @@ export default function VentasYTickets({ initialTxnId }) {
       {tabActiva === 3 && <TabValidacion />}
     </div>
   )
+}
+
+VentasYTickets.propTypes = {
+  initialTxnId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 }
