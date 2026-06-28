@@ -864,7 +864,7 @@ export default function Programacion() {
           showtimes={showtimes}
           totalCines={cinesSeleccionados.length}
           indexActual={indexCine}
-          fechaInicial={fechaPreseleccionada}
+          fechaInicial={indexCine === 0 ? fechaPreseleccionada : null}
           onGuardar={handleFormGuardado}
           onAtras={handleAtras}
           onClose={cerrarFlujo}
