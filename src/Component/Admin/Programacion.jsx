@@ -858,6 +858,7 @@ export default function Programacion() {
 
       {paso === 'form' && cinesSeleccionados[indexCine] && (
         <ModalFormFuncion
+          key={indexCine}
           cine={cinesSeleccionados[indexCine]}
           peliculas={peliculas}
           salas={salas}
