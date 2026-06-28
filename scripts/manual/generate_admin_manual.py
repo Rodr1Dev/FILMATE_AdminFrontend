@@ -39,6 +39,14 @@ DOC_CODE = "MA-FILMATE-ADM-001"
 VERSION = "1.0"
 BASELINE_DATE = "20 de junio de 2026"
 
+FLD_CHAR = "w:fldChar"
+FLD_CHAR_TYPE = "w:fldCharType"
+TEAM_FILMATE = "Equipo FILMATE"
+COURSE_NAME = "Gestión de la Configuración de Software"
+BASELINE_LABEL = "Línea base"
+VERSION_LABEL = "Versión"
+TABLE_DATE = "20/06/2026"
+
 LOGO_CANDIDATES = [
     ROOT / "public" / "logoGrandeFilmate.png",
     ROOT.parent / "FILMATE_UserFrontend" / "public" / "logoGrandeFilmate.png",
@@ -76,22 +84,25 @@ class Manual:
         styles["Normal"].paragraph_format.space_after = Pt(6)
         styles["Normal"].paragraph_format.line_spacing = 1.15
 
+        H1 = "Heading 1"
+        H2 = "Heading 2"
+        H3 = "Heading 3"
         heading_colors = {
             "Title": RGBColor(15, 23, 42),
-            "Heading 1": RGBColor(30, 64, 175),
-            "Heading 2": RGBColor(190, 24, 93),
-            "Heading 3": RGBColor(15, 118, 110),
+            H1: RGBColor(30, 64, 175),
+            H2: RGBColor(190, 24, 93),
+            H3: RGBColor(15, 118, 110),
         }
         for name, color in heading_colors.items():
             style = styles[name]
             style.font.name = "Aptos Display"
             style.font.color.rgb = color
 
-        styles["Heading 1"].font.size = Pt(18)
-        styles["Heading 1"].paragraph_format.space_before = Pt(14)
-        styles["Heading 1"].paragraph_format.space_after = Pt(8)
-        styles["Heading 2"].font.size = Pt(14)
-        styles["Heading 3"].font.size = Pt(11.5)
+        styles[H1].font.size = Pt(18)
+        styles[H1].paragraph_format.space_before = Pt(14)
+        styles[H1].paragraph_format.space_after = Pt(8)
+        styles[H2].font.size = Pt(14)
+        styles[H3].font.size = Pt(11.5)
 
         for section in self.doc.sections:
             header = section.header.paragraphs[0]
@@ -104,24 +115,24 @@ class Manual:
             footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = footer.add_run("Página ")
             run.font.size = Pt(8)
-            fld_char1 = OxmlElement("w:fldChar")
-            fld_char1.set(qn("w:fldCharType"), "begin")
+            fld_char1 = OxmlElement(FLD_CHAR)
+            fld_char1.set(qn(FLD_CHAR_TYPE), "begin")
             instr_text = OxmlElement("w:instrText")
             instr_text.set(qn("xml:space"), "preserve")
             instr_text.text = "PAGE"
-            fld_char2 = OxmlElement("w:fldChar")
-            fld_char2.set(qn("w:fldCharType"), "end")
+            fld_char2 = OxmlElement(FLD_CHAR)
+            fld_char2.set(qn(FLD_CHAR_TYPE), "end")
             run._r.append(fld_char1)
             run._r.append(instr_text)
             run._r.append(fld_char2)
             run.add_text(" de ")
-            fld_char3 = OxmlElement("w:fldChar")
-            fld_char3.set(qn("w:fldCharType"), "begin")
+            fld_char3 = OxmlElement(FLD_CHAR)
+            fld_char3.set(qn(FLD_CHAR_TYPE), "begin")
             instr_text2 = OxmlElement("w:instrText")
             instr_text2.set(qn("xml:space"), "preserve")
             instr_text2.text = "NUMPAGES"
-            fld_char4 = OxmlElement("w:fldChar")
-            fld_char4.set(qn("w:fldCharType"), "end")
+            fld_char4 = OxmlElement(FLD_CHAR)
+            fld_char4.set(qn(FLD_CHAR_TYPE), "end")
             run._r.append(fld_char3)
             run._r.append(instr_text2)
             run._r.append(fld_char4)
@@ -278,11 +289,11 @@ class Manual:
             [
                 ["Campo", "Informaci\u00f3n"],
                 ["C\u00f3digo", DOC_CODE],
-                ["Versi\u00f3n", VERSION],
-                ["L\u00ednea base", BASELINE_DATE],
-                ["Curso", "Gesti\u00f3n de la Configuraci\u00f3n de Software"],
+                [VERSION_LABEL, VERSION],
+                [BASELINE_LABEL, BASELINE_DATE],
+                ["Curso", COURSE_NAME],
                 ["Estado", "Versi\u00f3n para evaluaci\u00f3n acad\u00e9mica"],
-                ["Elaborado por", "Equipo FILMATE"],
+                ["Elaborado por", TEAM_FILMATE],
                 ["Docente", "REYES HUAMAN, ANITA MARLENE"],
             ],
             header=True,
@@ -313,11 +324,11 @@ class Manual:
                 [
                     ["Campo", "Informaci\u00f3n"],
                     ["C\u00f3digo", DOC_CODE],
-                    ["Versi\u00f3n", VERSION],
-                    ["L\u00ednea base", BASELINE_DATE],
-                    ["Curso", "Gesti\u00f3n de la Configuraci\u00f3n de Software"],
+                    [VERSION_LABEL, VERSION],
+                    [BASELINE_LABEL, BASELINE_DATE],
+                    ["Curso", COURSE_NAME],
                     ["Estado", "Versi\u00f3n para evaluaci\u00f3n acad\u00e9mica"],
-                    ["Elaborado por", "Equipo FILMATE"],
+                    ["Elaborado por", TEAM_FILMATE],
                     ["Docente", "REYES HUAMAN, ANITA MARLENE"],
                 ],
                 widths=[4.7 * cm, 10.3 * cm],
@@ -476,17 +487,20 @@ class Manual:
                 cell = table.cell(r_index, c_index)
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                 cell.text = str(value)
-                for paragraph in cell.paragraphs:
-                    for run in paragraph.runs:
-                        run.font.size = Pt(9)
-                        if header and r_index == 0:
-                            run.bold = True
-                            run.font.color.rgb = RGBColor(255, 255, 255)
-                if header and r_index == 0:
-                    shading = OxmlElement("w:shd")
-                    shading.set(qn("w:fill"), "1E3A8A")
-                    cell._tc.get_or_add_tcPr().append(shading)
+                self._style_doc_cell(cell, header, r_index)
         self.doc.add_paragraph("")
+
+    def _style_doc_cell(self, cell, header: bool, r_index: int) -> None:
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.size = Pt(9)
+                if header and r_index == 0:
+                    run.bold = True
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+        if header and r_index == 0:
+            shading = OxmlElement("w:shd")
+            shading.set(qn("w:fill"), "1E3A8A")
+            cell._tc.get_or_add_tcPr().append(shading)
 
     def _pdf_table(self, rows: list[list[str]], widths: list[float]) -> Table:
         data = []
@@ -552,10 +566,10 @@ def add_control_and_scope(manual: Manual) -> None:
     manual.heading("Control del documento", 1)
     manual.table(
         [
-            ["Versi\u00f3n", "Fecha", "Descripci\u00f3n del cambio", "Responsable"],
-            ["0.1", "20/06/2026", "Inventario funcional y planificaci\u00f3n de capturas.", "Equipo FILMATE"],
-            ["0.9", "20/06/2026", "Ejecuci\u00f3n de 26 evidencias visuales y validaci\u00f3n de flujos.", "Equipo FILMATE"],
-            ["1.0", "20/06/2026", "Emisi\u00f3n del manual acad\u00e9mico en Markdown, Word y PDF.", "Equipo FILMATE"],
+            [VERSION_LABEL, "Fecha", "Descripci\u00f3n del cambio", "Responsable"],
+            ["0.1", TABLE_DATE, "Inventario funcional y planificaci\u00f3n de capturas.", TEAM_FILMATE],
+            ["0.9", TABLE_DATE, "Ejecuci\u00f3n de 26 evidencias visuales y validaci\u00f3n de flujos.", TEAM_FILMATE],
+            ["1.0", TABLE_DATE, "Emisi\u00f3n del manual acad\u00e9mico en Markdown, Word y PDF.", TEAM_FILMATE],
         ]
     )
     manual.paragraph(
