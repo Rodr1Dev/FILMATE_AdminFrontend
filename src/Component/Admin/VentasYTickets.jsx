@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
 
 const VENTAS_BASE        = '/api/admin/transactions'
-const TICKETS_BASE       = '/api/tickets'
 const ADMIN_REEMBOLSOS   = '/api/admin/reembolsos'
 
 async function apiFetch(url, opts = {}) {
@@ -434,7 +433,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
     if (!motivo.trim()) { setError('El motivo es obligatorio'); return }
     setSaving(true); setError(null)
     try {
-      await apiFetch(`/api/reembolsos/`, {
+      await apiFetch(`${ADMIN_REEMBOLSOS}/`, {
         method: 'POST',
         body: JSON.stringify({
           id_transaccion: transaccionId,
@@ -454,12 +453,14 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
       onClick={e => e.target === e.currentTarget && onClose()}
       onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+      <dialog open aria-label="Solicitar Reembolso"
+        style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: 'none', position: 'relative' }}>
         <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: '#121212' }}>Solicitar Reembolso</h3>
 
         <div style={{ marginBottom: 16 }}>
           <label htmlFor="reembolso-motivo" style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>Motivo *</label>
           <textarea id="reembolso-motivo" value={motivo} onChange={e => { setMotivo(e.target.value); if (touched) { setTouched(false) }; if (error === 'El motivo es obligatorio') { setError(null) } }} rows={3}
+            onKeyDown={e => e.stopPropagation()}
             style={{ width: '100%', border: motivoError ? '1px solid #EF4444' : '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
             placeholder="Describa el motivo del reembolso..." />
           {motivoError && <p style={{ margin: '4px 0 0', fontSize: 12, color: '#EF4444' }}>Campo obligatorio</p>}
@@ -495,7 +496,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
             {saving ? 'Enviando…' : 'Solicitar Reembolso'}
           </button>
         </div>
-      </div>
+      </dialog>
     </button>
   )
 }
@@ -693,7 +694,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <EstadoBadge estado={data.estado_pago} />
           <a
-            href={`${TICKETS_BASE}/transaction/${data.id_transaccion}/pdf`}
+            href={`${VENTAS_BASE}/${data.id_transaccion}/pdf`}
             target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', fontSize: 13, fontWeight: 600, color: '#121212', textDecoration: 'none' }}>
             <DownloadIcon size={15} color="#374151" />

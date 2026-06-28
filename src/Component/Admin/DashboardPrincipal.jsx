@@ -239,26 +239,14 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   const [transactions, setTransactions] = useState([])
   const [ventasMes, setVentasMes] = useState(0)
   const [pendientes, setPendientes] = useState(0)
-  const [reportesGen, setReportesGen] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('reportes_generados')) || { count: 0, date: null } }
-    catch { return { count: 0, date: null } }
-  })
+  const [reportesGen, setReportesGen] = useState({ count: 0, ultima_generacion: null })
 
   useEffect(() => {
-    const sync = () => {
-      try {
-        const val = JSON.parse(localStorage.getItem('reportes_generados'))
-        if (val) setReportesGen(val)
-      } catch {}
-    }
-    globalThis.addEventListener('focus', sync)
-    globalThis.addEventListener('storage', sync)
-    document.addEventListener('visibilitychange', sync)
-    return () => {
-      globalThis.removeEventListener('focus', sync)
-      globalThis.removeEventListener('storage', sync)
-      document.removeEventListener('visibilitychange', sync)
-    }
+    const token = localStorage.getItem('filmate_token')
+    fetch('/api/admin/reports/generados', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setReportesGen(d) })
+      .catch(() => {})
   }, [])
   const [salas, setSalas] = useState([])
   const [cineMap, setCineMap] = useState({})
@@ -407,7 +395,7 @@ DashboardContent.propTypes = {
   }),
   reportesGen: PropTypes.shape({
     count: PropTypes.number,
-    date: PropTypes.string,
+    ultima_generacion: PropTypes.string,
   }),
   ventasTotales: PropTypes.number,
   ingresosTotales: PropTypes.number,
@@ -516,10 +504,10 @@ function DashboardContent(props) {
           />
           <SummaryCard
             icon={FileText} iconBg="#F1F5F9" iconColor="#64748B"
-            badge={reportesGen?.count > 0 ? '1' : '0'} trend={reportesGen?.count > 0 ? 'up' : 'neutral'}
+            badge={reportesGen?.count > 0 ? String(reportesGen.count) : '0'} trend={reportesGen?.count > 0 ? 'up' : 'neutral'}
             label="Reportes Generados"
             value={String(reportesGen?.count ?? 0)}
-            sub={reportesGen?.date ? new Date(reportesGen.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+            sub={reportesGen?.ultima_generacion ? new Date(reportesGen.ultima_generacion).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
           />
         </div>
 

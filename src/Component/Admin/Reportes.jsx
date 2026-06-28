@@ -15,6 +15,7 @@ const REPORT_TYPES = [
   'Ocupación por Salas',
   'Ventas por Horario',
   'Análisis de Películas',
+  'Detalle de Compras',
 ]
 
 const DATE_RANGES = [
@@ -357,6 +358,14 @@ export default function Reportes() {
   const start = (page - 1) * PAGE_SIZE + 1
   const end2 = Math.min(page * PAGE_SIZE, totalRecords)
 
+  const hayFiltrosActivos = reportType !== REPORT_TYPES[0] || dateRange.value !== DATE_RANGES[0].value
+
+  const handleLimpiarFiltros = () => {
+    setReportType(REPORT_TYPES[0])
+    setDateRange(DATE_RANGES[0])
+    setPage(1)
+  }
+
   const getEndpoint = useCallback(() => {
     switch (reportType) {
       case 'Rendimiento de Taquilla':
@@ -367,6 +376,8 @@ export default function Reportes() {
         return `${REPORTES_BASE}/ventas-horario`
       case 'Análisis de Películas':
         return `${REPORTES_BASE}/analisis-peliculas`
+      case 'Detalle de Compras':
+        return `${REPORTES_BASE}/detalle-compras`
       default:
         return `${REPORTES_BASE}/taquilla`
     }
@@ -401,6 +412,7 @@ export default function Reportes() {
     'Ocupación por Salas': 'ocupacion-salas',
     'Ventas por Horario': 'ventas-horario',
     'Análisis de Películas': 'analisis-peliculas',
+    'Detalle de Compras': 'detalle-compras',
   }
 
   function handleExport() {
@@ -444,6 +456,8 @@ export default function Reportes() {
         return renderVentasHorario(pageData)
       case 'Análisis de Películas':
         return renderAnalisis(pageData)
+      case 'Detalle de Compras':
+        return renderDetalleCompras(pageData)
       default:
         return null
     }
@@ -619,6 +633,53 @@ export default function Reportes() {
     )
   }
 
+  function renderDetalleCompras(rows) {
+    const headers = ['ID', 'Cliente', 'Película', 'Sala', 'Boletos', 'Confitería', 'Total', 'Fecha', 'Estado']
+    return (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+              {headers.map(h => (
+                <th
+                  key={h}
+                  style={{
+                    textAlign: h === 'ID' || h === 'Boletos' || h === 'Total' ? 'right' : 'left',
+                    padding: '10px 16px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#9CA3AF',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id_transaccion} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 600, color: '#4338CA', textAlign: 'right' }}>{r.id_transaccion}</td>
+                <td style={{ padding: '10px 16px', color: '#374151' }}>{r.cliente}</td>
+                <td style={{ padding: '10px 16px', color: '#6B7280' }}>{r.pelicula}</td>
+                <td style={{ padding: '10px 16px', color: '#6B7280' }}>{r.sala}</td>
+                <td style={{ padding: '10px 16px', color: '#6B7280', textAlign: 'right' }}>{r.boletos ?? 0}</td>
+                <td style={{ padding: '10px 16px', color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.confiteria || '—'}</td>
+                <td style={{ padding: '10px 16px', fontWeight: 600, color: '#121212', textAlign: 'right' }}>{formatCurrency(r.total ?? 0)}</td>
+                <td style={{ padding: '10px 16px', color: '#6B7280', fontSize: 12 }}>{r.fecha ? new Date(r.fecha).toLocaleDateString('es-PE') : '—'}</td>
+                <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                  <StatusBadge estado={r.estado} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   const horarioPicoVal = resumen?.horario_pico || (data.length ? data.reduce((max, r) => r.ventas > max.ventas ? r : max).horario : '—')
 
   return (
@@ -655,7 +716,7 @@ export default function Reportes() {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
-              onClick={() => { setRefreshKey(k => k + 1); setShowOverlay(true); localStorage.setItem('reportes_generados', JSON.stringify({ count: 1, date: new Date().toISOString() })) }}
+              onClick={async () => { setRefreshKey(k => k + 1); setShowOverlay(true); try { await apiFetch(`${REPORTES_BASE}/generar`, { method: 'POST' }) } catch { /* silencioso */ } }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -674,6 +735,24 @@ export default function Reportes() {
               <FileText size={16} />
               {'Generar Reporte'}
             </button>
+            {hayFiltrosActivos && (
+              <button
+                onClick={handleLimpiarFiltros}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 10,
+                  border: '1px solid #FECACA',
+                  background: '#FEF2F2',
+                  color: '#EF4444',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  alignSelf: 'flex-end',
+                  height: 38,
+                }}>
+                Limpiar
+              </button>
+            )}
             {updated && <span style={{ fontSize: 12, color: '#059669', fontWeight: 600, alignSelf: 'center' }}>✓ Actualizado</span>}
           </div>
         </div>
@@ -816,6 +895,35 @@ export default function Reportes() {
             icon={<FilmIcon />}
             label="Total Películas"
             value={(resumen?.total_peliculas || data.reduce((s, r) => s + (r.peliculas || 0), 0)).toString()}
+          />
+        </div>
+      )}
+
+      {reportType === 'Detalle de Compras' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
+          <SummaryCard
+            icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>}
+            label="Total Transacciones"
+            value={(resumen?.total_transacciones || data.length).toLocaleString()}
+            sub="Compras realizadas"
+          />
+          <SummaryCard
+            icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+            label="Ingresos Totales"
+            value={formatCurrency(resumen?.total_ingresos ?? data.reduce((s, r) => s + (r.total || 0), 0))}
+            sub="En todo el período"
+          />
+          <SummaryCard
+            icon={<Ticket size={20} />}
+            label="Boletos Vendidos"
+            value={(resumen?.total_boletos || data.reduce((s, r) => s + (r.boletos || 0), 0)).toLocaleString()}
+            sub="Entradas de películas"
+          />
+          <SummaryCard
+            icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>}
+            label="Snacks Vendidos"
+            value={(resumen?.total_snacks || data.reduce((s, r) => s + (r.items_confiteria || 0), 0)).toLocaleString()}
+            sub="Productos de confitería"
           />
         </div>
       )}
