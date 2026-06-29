@@ -12,6 +12,10 @@ const FAQS = [
     a: 'Ve a "Ventas y Tickets" > "Validación de Entradas". Escanea el código QR del ticket o pega el código en el campo de texto.' },
   { q: '¿Qué hago si el sistema no carga?',
     a: 'Verifica que el backend esté corriendo en localhost:8000. Revisa la consola del navegador (F12) para errores. Si el problema persiste, contacta a soporte técnico.' },
+  { q: '¿Cómo uso la integración con TMDB para agregar películas?',
+    a: 'Al crear una nueva película en "Catálogo de Películas", verás un campo de búsqueda de TMDB. Escribe el título en inglés o español, selecciona la película de los resultados, y los datos (título, sinopsis, elenco, director, géneros, duración, año, póster) se auto-completarán. Luego solo ajusta estado y tráiler antes de guardar.' },
+  { q: '¿Cómo configuro los precios de entradas y el IVA?',
+    a: 'Ve a "Configuración y Precios". La pestaña "Precios de Entradas" permite definir montos por formato (2D/3D/IMAX) y porcentajes por tipo de entrada (General/Niño/Jubilado/Estudiante). "Parámetros del Sistema" permite ajustar el IVA y la tasa de servicio. Todos los cambios se guardan directamente en el servidor.' },
   { q: '¿Los datos del Dashboard son en tiempo real?',
     a: 'Sí, los datos se obtienen directamente del API al cargar la página. Los filtros de período, estado, sala y búsqueda se aplican del lado del cliente para una respuesta inmediata sin recargar.' },
   { q: '¿Cómo funciona el filtro de período en Dashboard?',
@@ -80,12 +84,12 @@ export default function AyudaSoporte() {
             {[
               { mod: 'Dashboard Principal', desc: 'Resumen ejecutivo con datos en tiempo real del API: tarjetas de boletos vendidos, ingresos, película taquillera y gráficos (ventas semanales por día e ingresos por tipo de sala). Incluye filtro por período (Hoy/7 días/Este mes/Mes anterior) que actualiza tarjetas y gráficos. Tabla de últimas 10 transacciones con búsqueda instantánea en todas las columnas y filtros por estado/sala. "Ver detalle" abre la transacción en Ventas y Tickets.' },
               { mod: 'Reportes', desc: 'Reportes detallados de ventas, ingresos y rendimiento.' },
-              { mod: 'Catálogo de Películas', desc: 'Gestión completa del catálogo: alta, edición y baja de películas.' },
+              { mod: 'Catálogo de Películas', desc: 'Gestión completa del catálogo: alta, edición y baja de películas. Incluye integración con TMDB para buscar y auto-completar datos de películas (título, sinopsis, elenco, póster, géneros, etc.) desde la base de datos de The Movie Database.' },
               { mod: 'Cines y Salas', desc: 'Administración de complejos, salas y configuración de asientos.' },
               { mod: 'Programación', desc: 'Cartelera: asignación de películas a salas con horarios.' },
               { mod: 'Ventas y Tickets', desc: 'Historial de transacciones, reembolsos y validación QR en puerta.' },
               { mod: 'Usuarios y Roles', desc: 'Gestión de usuarios del sistema y control de permisos.' },
-              { mod: 'Configuración y Precios', desc: 'Ajustes de precios base y configuración general.' },
+              { mod: 'Configuración y Precios', desc: 'Ajustes de precios base, costos de confitería y parámetros del sistema con tres pestañas: Precios de Entradas (2D, 3D, IMAX y tipos de entrada), Costos de Confitería (combos y productos) y Parámetros del Sistema (IVA, tasa de servicio, etc.). Los cambios se guardan directamente en el servidor vía API.' },
             ].map(s => (
               <div key={s.mod} style={{ display: 'flex', gap: 8 }}>
                 <span style={{ color: '#283593', fontWeight: 600, fontSize: 13, minWidth: 180 }}>{s.mod}</span>
@@ -103,6 +107,8 @@ export default function AyudaSoporte() {
               { label: 'Período en Dashboard', tip: 'El selector de período (Hoy/7 días/Este mes/Mes anterior) recalcula tarjetas de resumen y gráficos automáticamente.' },
               { label: 'Ver detalle', tip: 'El botón "Ver detalle" en la tabla del Dashboard abre la transacción directamente en Ventas y Tickets.' },
               { label: 'Limpiar filtros', tip: 'El botón "Limpiar filtros" en Dashboard resetea búsqueda, estado y sala de un solo clic.' },
+              { label: 'TMDB en Catálogo', tip: 'Usa la búsqueda de TMDB al crear una película para auto-completar todos los datos automáticamente. Los campos bloqueados en modo TMDB se desbloquean al editar.' },
+              { label: 'Configuración de precios', tip: 'Los cambios en "Configuración y Precios" se guardan uno por uno con el botón 💾 de cada fila. Los parámetros del sistema tienen un solo botón "Guardar Cambios".' },
             ].map(s => (
               <div key={s.label}>
                 <span style={{ fontWeight: 600, fontSize: 13, color: '#121212' }}>{s.label}</span>
