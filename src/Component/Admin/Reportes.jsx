@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
 import { ChevronDown, FileText, Download, ChevronLeft, ChevronRight, Ticket } from 'lucide-react'
 
@@ -350,6 +350,21 @@ export default function Reportes() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [showOverlay, setShowOverlay] = useState(false)
   const [updated, setUpdated] = useState(false)
+  const overlayRef = useRef(null)
+
+  useEffect(() => {
+    if (!showOverlay) return
+    const handleKey = (e) => { if (e.key === 'Escape') setShowOverlay(false) }
+    const handleClick = (e) => {
+      if (overlayRef.current && e.target === overlayRef.current) setShowOverlay(false)
+    }
+    document.addEventListener('keydown', handleKey)
+    document.addEventListener('mousedown', handleClick)
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      document.removeEventListener('mousedown', handleClick)
+    }
+  }, [showOverlay])
 
   const data = reportData.data || []
   const resumen = reportData.resumen || {}
@@ -659,8 +674,8 @@ export default function Reportes() {
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.id_transaccion} style={{ borderBottom: '1px solid #F3F4F6' }}>
+            {rows.map((r, i) => (
+              <tr key={r.id_transaccion ?? i} style={{ borderBottom: '1px solid #F3F4F6' }}>
                 <td style={{ padding: '10px 16px', fontWeight: 600, color: '#4338CA', textAlign: 'right' }}>{r.id_transaccion}</td>
                 <td style={{ padding: '10px 16px', color: '#374151' }}>{r.cliente}</td>
                 <td style={{ padding: '10px 16px', color: '#6B7280' }}>{r.pelicula}</td>
@@ -759,15 +774,14 @@ export default function Reportes() {
       </div>
 
       {showOverlay && (
-        <button
+        <div ref={overlayRef}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(0,0,0,0.45)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: 'none', cursor: 'default', padding: 0,
+            padding: 0,
             width: '100vw', height: '100vh',
           }}
-          onClick={e => { if (e.target === e.currentTarget) setShowOverlay(false) }}
         >
           <dialog
             open
@@ -805,7 +819,7 @@ export default function Reportes() {
               </button>
             </div>
           </dialog>
-        </button>
+        </div>
       )}
 
       {reportType === 'Rendimiento de Taquilla' && (
