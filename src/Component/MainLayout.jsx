@@ -9,6 +9,7 @@ import Programacion from './Admin/Programacion.jsx'
 import CinesYSalas from './Admin/CinesYSalas.jsx'
 import Reportes from './Admin/Reportes.jsx'
 import AyudaSoporte from './Admin/AyudaSoporte.jsx'
+import ConfiguracionPrecios from './Admin/ConfiguracionPrecios.jsx'
 
 // Placeholder for other sections
 function PlaceholderView({ nombre }) {
@@ -39,7 +40,7 @@ export default function MainLayout() {
       case 3: return <CinesYSalas />
       case 4: return <Programacion />
       case 6: return <PlaceholderView nombre="Usuarios y Roles" />
-      case 7: return <PlaceholderView nombre="Configuración y Precios" />
+      case 7: return <ConfiguracionPrecios />
       case 8: return <AyudaSoporte />
       default: return <VentasYTickets />
     }

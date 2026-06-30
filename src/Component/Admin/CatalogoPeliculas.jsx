@@ -5,6 +5,7 @@ import './CatalogoPeliculas.css'
 const API_BASE = '/api'
 
 const ADMIN = `${API_BASE}/admin/movies`
+const TMDB  = `${API_BASE}/admin/movies/tmdb`
 
 const api = {
   list:    (skip = 0, limit = 200) => fetch(`${ADMIN}/?skip=${skip}&limit=${limit}`).then(r => r.json()),
@@ -24,6 +25,23 @@ const api = {
   }),
   genres:          () => fetch(`${ADMIN}/meta/genres`).then(r => r.json()),
   classifications: () => fetch(`${ADMIN}/meta/classifications`).then(r => r.json()),
+  tmdbSearch:  async (q) => {
+    if (!q || q.trim().length < 3) return []
+    try {
+      const r = await fetch(`${TMDB}/search?query=${encodeURIComponent(q.trim())}`)
+      if (!r.ok) return []
+      const data = await r.json()
+      return Array.isArray(data) ? data : (data.results || [])
+    } catch { return [] }
+  },
+  tmdbPreview: async (id) => {
+    const r = await fetch(`${TMDB}/${id}/preview`)
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  tmdbCreate:  (id, body) => fetch(`${TMDB}/${id}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
 }
 
 function extractString(value) {
@@ -133,6 +151,7 @@ function validarForm(form) {
 function EstadoBadge({ estado }) {
   const map = {
     'EN CARTELERA': { bg: '#DCFCE7', text: '#008236' },
+    'ESTRENO':      { bg: '#FCE7F3', text: '#BE185D' },
     'PRÓXIMAMENTE': { bg: '#DBEAFE', text: '#1D4ED8' },
     'ACTIVO':       { bg: '#F3F4F6', text: '#6B7280' },
   }
@@ -184,25 +203,27 @@ Icon.propTypes = {
 }
 
 function Overlay({ children, onClose }) {
+  const ref = useRef(null)
+
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose() }
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
     document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
+    document.addEventListener('mousedown', handleClick)
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      document.removeEventListener('mousedown', handleClick)
+    }
   }, [onClose])
 
   return (
-    <button
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      onKeyDown={e => { if (e.key === 'Escape') onClose() }}
-      aria-label="Cerrar"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, border: 'none', cursor: 'default' }}
-    >
-      <div
-        style={{ maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}
-      >
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div ref={ref} style={{ maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
         {children}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -290,8 +311,9 @@ ConfirmEliminar.propTypes = {
   onEliminar: PropTypes.func.isRequired,
 }
 
-function GeneroSelector({ value, onChange, genres, error }) {
+function GeneroSelector({ value, onChange, genres, error, disabled }) {
   const toggle = (id) => {
+    if (disabled) return
     if (value.includes(id)) {
       onChange(value.filter(x => x !== id))
     } else {
@@ -305,7 +327,7 @@ function GeneroSelector({ value, onChange, genres, error }) {
         {genres.map(g => {
           const id = g.id_genero
           const nombre = g.nombre_genero || g.nombre
-          const active = value.includes(id)
+          const active = disabled ? false : value.includes(id)
 
           const borderColor = error ? '#FCA5A5' : '#D1D5DC'
           const bgColor = error ? '#FEF2F2' : '#F9FAFB'
@@ -315,16 +337,18 @@ function GeneroSelector({ value, onChange, genres, error }) {
               key={id}
               type="button"
               onClick={() => toggle(id)}
+              disabled={disabled}
               style={{
                 padding: '5px 12px',
                 borderRadius: 999,
                 fontSize: 12,
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: disabled ? 'default' : 'pointer',
                 border: active ? 'none' : `1px solid ${borderColor}`,
                 background: active ? '#1C2566' : bgColor,
                 color: active ? '#fff' : '#374151',
                 transition: 'all 0.15s',
+                opacity: disabled ? 0.6 : 1,
               }}
             >
               {nombre}
@@ -346,6 +370,7 @@ GeneroSelector.propTypes = {
   onChange: PropTypes.func,
   genres: PropTypes.array,
   error: PropTypes.string,
+  disabled: PropTypes.bool,
 }
 
 function FieldError({ msg }) {
@@ -357,9 +382,96 @@ FieldError.propTypes = {
   msg: PropTypes.string,
 }
 
+function TmdbSearchInput({ onSelect, onClose }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus()
+  }, [])
+
+  useEffect(() => {
+    if (!query || query.trim().length < 3) {
+      setResults([])
+      setShowDropdown(false)
+      return
+    }
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const list = await api.tmdbSearch(query)
+        setResults(list)
+        setShowDropdown(list.length > 0)
+      } catch {
+        setResults([])
+        setShowDropdown(false)
+      }
+      setLoading(false)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }}>
+            <Icon d={ICON_SEARCH} size={14} />
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar película en TMDB..."
+            style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '9px 14px 9px 34px', fontSize: 13, color: '#374151', outline: 'none', background: '#fff', boxSizing: 'border-box' }}
+          />
+          {loading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', fontSize: 11 }}>buscando...</span>}
+        </div>
+        <button onClick={onClose} type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: 4 }}>
+          <Icon d={ICON_X} size={18} />
+        </button>
+      </div>
+      {showDropdown && results.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, maxHeight: 280, overflowY: 'auto' }}>
+          {results.map(r => (
+            <button
+              key={r.tmdb_id || r.id}
+              type="button"
+              onClick={() => { onSelect(r); setShowDropdown(false) }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: '#374151' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              {r.url_poster ? (
+                <img src={r.url_poster} alt="" style={{ width: 36, height: 54, borderRadius: 4, objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 36, height: 54, borderRadius: 4, background: '#F3F4F6' }} />
+              )}
+              <div>
+                <div style={{ fontWeight: 600 }}>{r.titulo}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{r.anio || ''}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+TmdbSearchInput.propTypes = {
+  onSelect: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+}
+
 function PeliculaForm({
   initial,
   onGuardar,
+  onTmdbCreate,
   onCancelar,
   saving,
   genres,
@@ -393,6 +505,14 @@ function PeliculaForm({
   const [form, setForm]           = useState(initForm)
   const [errores, setErrores]     = useState({})
   const [showDiscard, setShowDiscard] = useState(false)
+  const [tmdbMode, setTmdbMode]   = useState(false)
+  const [tmdbId, setTmdbId]       = useState(null)
+  const [tmdbLoading, setTmdbLoading] = useState(false)
+
+  function obtenerTextoBoton() {
+    if (tmdbMode) return 'Guardar desde TMDB'
+    return 'Guardar Película'
+  }
 
   useEffect(() => {
     if (!initial) return
@@ -410,11 +530,43 @@ function PeliculaForm({
       director:       initial.director       || '',
       elenco:         initial.elenco         || '',
     })
+    setTmdbMode(false)
+    setTmdbId(null)
   }, [initial])
 
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }))
     if (errores[k]) setErrores(prev => ({ ...prev, [k]: undefined }))
+  }
+
+  const handleTmdbSelect = async (movie) => {
+    const id = movie.tmdb_id || movie.id
+    if (!id) return
+    setTmdbLoading(true)
+    try {
+      const preview = await api.tmdbPreview(id)
+      setTmdbId(id)
+      setForm({
+        titulo:         preview.titulo              || '',
+        sinopsis:       preview.sinopsis            || '',
+        duracion:       preview.duracion_minutos ? String(preview.duracion_minutos) : '',
+        clasificacion:  preview.clasificacion       || '',
+        poster:         preview.url_poster          || '',
+        trailer:        preview.url_trailer          || '',
+        banner:         preview.url_banner           || '',
+        anio_lanzamiento: preview.anio_lanzamiento   || '',
+        generos:        (preview.tmdb_genres || []).map(g => g.nombre || ''),
+        estado:         'PRÓXIMAMENTE',
+        director:       preview.director            || '',
+        elenco:         preview.elenco              || '',
+      })
+      setTmdbMode(true)
+      setErrores({})
+    } catch (e) {
+      setErrores({ tmdb: `Error al cargar datos de TMDB: ${e.message}` })
+    } finally {
+      setTmdbLoading(false)
+    }
   }
 
   const fieldStyle = (key) => ({
@@ -434,6 +586,14 @@ function PeliculaForm({
   const section = { fontSize: 12, fontWeight: 700, color: '#121212', margin: '0 0 10px', borderBottom: '2px solid #1C2566', paddingBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }
 
   const handleGuardar = () => {
+    if (tmdbMode) {
+      if (!form.estado) {
+        setErrores({ estado: 'El estado es obligatorio' })
+        return
+      }
+      onTmdbCreate(tmdbId, { estado_pelicula: form.estado, url_trailer: form.trailer || '' })
+      return
+    }
     const errs = validarForm(form)
     if (Object.keys(errs).length > 0) {
       setErrores(errs)
@@ -456,7 +616,45 @@ function PeliculaForm({
           </button>
         </div>
 
-          {camposFaltantes > 0 && Object.keys(errores).length > 0 && (
+        {!initial && !tmdbMode && (
+          <div style={{ marginBottom: 18 }}>
+            <TmdbSearchInput onSelect={handleTmdbSelect} onClose={() => {}} />
+            <p style={{ fontSize: 11, color: '#9CA3AF', margin: '6px 0 0' }}>Busca una película en TMDB para auto-completar los datos. También puedes llenar el formulario manualmente.</p>
+          </div>
+        )}
+
+        {tmdbLoading && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6B7280', fontSize: 14 }}>
+            Cargando datos de TMDB...
+          </div>
+        )}
+
+        {tmdbMode && !tmdbLoading && (
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '8px 12px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon d={ICON_CHECK} size={16} />
+              <span style={{ fontSize: 13, color: '#1D4ED8', fontWeight: 600 }}>
+                Datos importados de TMDB
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setTmdbMode(false); setTmdbId(null); setForm(initForm()) }}
+              style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Creación manual
+            </button>
+          </div>
+        )}
+
+        {errores.tmdb && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon d={ICON_WARN} size={16} />
+            <span style={{ fontSize: 13, color: '#DC2626', fontWeight: 600 }}>{errores.tmdb}</span>
+          </div>
+        )}
+
+        {!tmdbLoading && camposFaltantes > 0 && Object.keys(errores).length > 0 && (
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon d={ICON_WARN} size={16} />
             <span style={{ fontSize: 13, color: '#DC2626', fontWeight: 600 }}>
@@ -465,16 +663,17 @@ function PeliculaForm({
           </div>
         )}
 
+        <div style={{ display: tmdbLoading ? 'none' : 'block' }}>
         <p style={section}>Información General</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={label} htmlFor="titulo">Título *</label>
-            <input id="titulo" style={fieldStyle('titulo')} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
+            <input id="titulo" disabled={tmdbMode} style={fieldStyle('titulo')} value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Título de la película" />
             <FieldError msg={errores.titulo} />
           </div>
           <div>
             <label style={label} htmlFor="clasificacion">Clasificación de edad *</label>
-            <select id="clasificacion" style={fieldStyle('clasificacion')} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
+            <select id="clasificacion" disabled={tmdbMode} style={fieldStyle('clasificacion')} value={form.clasificacion} onChange={e => set('clasificacion', e.target.value)}>
               <option value="">Seleccionar</option>
               {classifications.map(c => <option key={c}>{c}</option>)}
             </select>
@@ -482,23 +681,24 @@ function PeliculaForm({
           </div>
           <div>
             <label style={label} htmlFor="duracion">Duración * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(minutos, ej: 120)</span></label>
-            <input id="duracion" style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="120" type="number" min="1" />
+            <input id="duracion" disabled={tmdbMode} style={fieldStyle('duracion')} value={form.duracion} onChange={e => set('duracion', e.target.value)} placeholder="120" type="number" min="1" />
             <FieldError msg={errores.duracion} />
           </div>
           <div>
             <label style={label} htmlFor="anio_lanzamiento">Año de lanzamiento * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(ej: 2025)</span></label>
-            <input id="anio_lanzamiento" style={fieldStyle('anio_lanzamiento')} value={form.anio_lanzamiento} onChange={e => set('anio_lanzamiento', e.target.value)} placeholder="2025" type="number" min="1888" max="2100" />
+            <input id="anio_lanzamiento" disabled={tmdbMode} style={fieldStyle('anio_lanzamiento')} value={form.anio_lanzamiento} onChange={e => set('anio_lanzamiento', e.target.value)} placeholder="2025" type="number" min="1888" max="2100" />
             <FieldError msg={errores.anio_lanzamiento} />
           </div>
           <div>
             <label style={label} htmlFor="director">Director *</label>
-            <input id="director" style={fieldStyle('director')} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
+            <input id="director" disabled={tmdbMode} style={fieldStyle('director')} value={form.director} onChange={e => set('director', e.target.value)} placeholder="Nombre del director" />
             <FieldError msg={errores.director} />
           </div>
           <div>
             <label style={label} htmlFor="estado">Estado *</label>
             <select id="estado" style={fieldStyle('estado')} value={form.estado} onChange={e => set('estado', e.target.value)}>
               <option value="EN CARTELERA">En cartelera</option>
+              <option value="ESTRENO">Estreno</option>
               <option value="PRÓXIMAMENTE">Próximamente</option>
               <option value="ACTIVO">Activo</option>
             </select>
@@ -509,19 +709,31 @@ function PeliculaForm({
         <p style={section}>Géneros *</p>
         <div style={{ marginBottom: 18 }}>
           <label style={{ ...label, marginBottom: 8 }} htmlFor="generos-select">Selecciona uno o más géneros</label>
-          <GeneroSelector
-            value={form.generos}
-            onChange={v => { set('generos', v); if (errores.generos) setErrores(prev => ({ ...prev, generos: undefined })) }}
-            genres={genres}
-            error={errores.generos}
-          />
+          {tmdbMode ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(form.generos || []).length > 0 ? form.generos.map(g => (
+                <span key={g} style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
+                  {g}
+                </span>
+              )) : (
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>Géneros asignados automáticamente por TMDB</span>
+              )}
+            </div>
+          ) : (
+            <GeneroSelector
+              value={form.generos}
+              onChange={v => { set('generos', v); if (errores.generos) setErrores(prev => ({ ...prev, generos: undefined })) }}
+              genres={genres}
+              error={errores.generos}
+            />
+          )}
         </div>
 
         <p style={section}>Multimedia</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
             <label style={label} htmlFor="poster">URL Poster *</label>
-            <input id="poster" style={fieldStyle('poster')} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
+            <input id="poster" disabled={tmdbMode} style={fieldStyle('poster')} value={form.poster} onChange={e => set('poster', e.target.value)} placeholder="https://..." />
             <FieldError msg={errores.poster} />
           </div>
           <div>
@@ -531,7 +743,7 @@ function PeliculaForm({
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={label} htmlFor="banner">URL Banner <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(opcional)</span></label>
-            <input id="banner" style={fieldStyle('banner')} value={form.banner} onChange={e => set('banner', e.target.value)} placeholder="https://... (imagen horizontal para el banner)" />
+            <input id="banner" disabled={tmdbMode} style={fieldStyle('banner')} value={form.banner} onChange={e => set('banner', e.target.value)} placeholder="https://... (imagen horizontal para el banner)" />
           </div>
         </div>
 
@@ -545,14 +757,14 @@ function PeliculaForm({
         <p style={section}>Descripción</p>
         <div style={{ marginBottom: 12 }}>
           <label style={label} htmlFor="sinopsis">Sinopsis *</label>
-          <textarea id="sinopsis" style={{ ...fieldStyle('sinopsis'), minHeight: 70, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
+          <textarea id="sinopsis" disabled={tmdbMode} style={{ ...fieldStyle('sinopsis'), minHeight: 70, resize: 'vertical' }} value={form.sinopsis} onChange={e => set('sinopsis', e.target.value)} placeholder="Descripción de la película..." />
           <FieldError msg={errores.sinopsis} />
         </div>
 
         <p style={section}>Reparto *</p>
         <div style={{ marginBottom: 14 }}>
           <label style={label} htmlFor="elenco">Elenco <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(nombres separados por coma)</span></label>
-          <textarea id="elenco" style={{ ...fieldStyle('elenco'), minHeight: 60, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Ej: Nicholas Galitzine, Jared Leto, Camila Mendes" />
+          <textarea id="elenco" disabled={tmdbMode} style={{ ...fieldStyle('elenco'), minHeight: 60, resize: 'vertical' }} value={form.elenco} onChange={e => set('elenco', e.target.value)} placeholder="Ej: Nicholas Galitzine, Jared Leto, Camila Mendes" />
           <FieldError msg={errores.elenco} />
         </div>
 
@@ -573,8 +785,9 @@ function PeliculaForm({
               opacity: saving ? 0.7 : 1,
             }}
           >
-            {saving ? 'Guardando...' : 'Guardar Película'}
+            {saving ? 'Guardando...' : obtenerTextoBoton()}
           </button>
+        </div>
         </div>
       </div>
       {showDiscard && <ConfirmDiscard onSi={onCancelar} onNo={() => setShowDiscard(false)} />}
@@ -585,6 +798,7 @@ function PeliculaForm({
 PeliculaForm.propTypes = {
   initial: PropTypes.object,
   onGuardar: PropTypes.func.isRequired,
+  onTmdbCreate: PropTypes.func,
   onCancelar: PropTypes.func.isRequired,
   saving: PropTypes.bool,
   genres: PropTypes.array,
@@ -851,6 +1065,30 @@ export default function CatalogoPeliculas() {
     }
   }
 
+  const handleTmdbCreate = async (tmdbMovieId, body) => {
+    setSaving(true)
+    try {
+      const created = await api.tmdbCreate(tmdbMovieId, body)
+      const movieId = created.id_pelicula || created.id
+      const det = await api.details(movieId)
+      const parsed = backendToFrontend(det)
+      const newMovie = {
+        ...parsed,
+        generos:  (det.generos  || []).map(g => g.nombre_genero ?? g.nombre ?? g),
+        director: det.director || '',
+        elenco:   det.elenco   || '',
+      }
+      setMovies(prev => [...prev, newMovie])
+      setDetailsCache(prev => ({ ...prev, [movieId]: { director: newMovie.director, elenco: newMovie.elenco } }))
+      setModalAdd(false)
+      setSuccessMsg('PELÍCULA AÑADIDA DESDE TMDB CORRECTAMENTE')
+    } catch (e) {
+      setErrorMsg(`Error al crear película desde TMDB: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleUpdate = async (formData) => {
     setSaving(true)
     try {
@@ -1052,6 +1290,7 @@ export default function CatalogoPeliculas() {
           <select value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setPage(1) }} style={dropStyle}>
             <option value="">ESTADO</option>
             <option value="EN CARTELERA">En cartelera</option>
+            <option value="ESTRENO">Estreno</option>
             <option value="PRÓXIMAMENTE">Próximamente</option>
             <option value="ACTIVO">Activo</option>
           </select>
@@ -1083,6 +1322,7 @@ export default function CatalogoPeliculas() {
           <PeliculaForm
             saving={saving}
             onGuardar={handleCreate}
+            onTmdbCreate={handleTmdbCreate}
             onCancelar={() => setModalAdd(false)}
             genres={genres}
             classifications={classifications}

@@ -858,13 +858,14 @@ export default function Programacion() {
 
       {paso === 'form' && cinesSeleccionados[indexCine] && (
         <ModalFormFuncion
+          key={indexCine}
           cine={cinesSeleccionados[indexCine]}
           peliculas={peliculas}
           salas={salas}
           showtimes={showtimes}
           totalCines={cinesSeleccionados.length}
           indexActual={indexCine}
-          fechaInicial={fechaPreseleccionada}
+          fechaInicial={indexCine === 0 ? fechaPreseleccionada : null}
           onGuardar={handleFormGuardado}
           onAtras={handleAtras}
           onClose={cerrarFlujo}

@@ -95,12 +95,13 @@ MapaAsientos.propTypes = {
   capacidad: PropTypes.number.isRequired,
 }
 
+const CAPACIDAD_FIJA = 150
+
 // ─── MODAL AGREGAR / EDITAR SALA ─────────────────────────────────────────────
-function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
+function ModalSala({ modo, salaInicial, idCine, salasExistentes, onClose, onGuardado }) {
   const [nombre,       setNombre]       = useState(salaInicial?.nombre_sala ?? '')
   const [tipoSala,     setTipoSala]     = useState(salaInicial?.tipo_sala   ?? 'Stand.')
   const [tipoFormato,  setTipoFormato]  = useState(salaInicial?.tipo_formato ?? '2D')
-  const [capacidad,    setCapacidad]    = useState(salaInicial?.capacidad_asientos ?? '')
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
   let labelBtn
@@ -113,7 +114,15 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
   }
 
   const handleGuardar = async () => {
-    if (!nombre.trim() || !capacidad) { setError('Completa todos los campos.'); return }
+    if (!nombre.trim()) { setError('Completa todos los campos.'); return }
+
+    // Validar nombre duplicado dentro del mismo cine
+    const duplicado = salasExistentes?.some(s =>
+      s.nombre_sala.trim().toLowerCase() === nombre.trim().toLowerCase() &&
+      (modo === 'crear' || s.id_sala !== salaInicial?.id_sala)
+    )
+    if (duplicado) { setError(`Ya existe una sala con el nombre "${nombre.trim()}" en este cine.`); return }
+
     setLoading(true); setError(null)
     try {
       const body = {
@@ -121,12 +130,11 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
         nombre_sala:        nombre.trim(),
         tipo_sala:          tipoSala,
         tipo_formato:       tipoFormato,
-        capacidad_asientos: Number(capacidad),
+        capacidad_asientos: CAPACIDAD_FIJA,
       }
       if (modo === 'crear') {
-        // Crear sala y generar asientos con el mismo layout que se muestra en la vista previa
         const sala = await apiFetch(`${ROOMS_BASE}/`, { method: 'POST', body: JSON.stringify(body) })
-        const asientoPreview = generarAsientos(Number(capacidad))
+        const asientoPreview = generarAsientos(CAPACIDAD_FIJA)
         const asientos = asientoPreview
           .flat()
           .filter(a => a.tipo === 'asiento')
@@ -136,10 +144,6 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
             columna: a.columna,
             tipo_asiento: 'Regular',
           }))
-
-        if (asientos.length !== Number(capacidad)) {
-          throw new Error(`Error de generación: se esperaban ${capacidad} asientos, pero se generaron ${asientos.length}`)
-        }
 
         await apiFetch(`${SEATS_BASE}/room/${sala.id_sala}/bulk`, {
           method: 'POST',
@@ -192,16 +196,6 @@ function ModalSala({ modo, salaInicial, idCine, onClose, onGuardado }) {
               </select>
             </Field>
           </div>
-          <Field label="Capacidad total de asientos">
-            <select value={capacidad} onChange={e => setCapacidad(e.target.value)} style={inputStyle}>
-              <option value="">Seleccionar capacidad...</option>
-              <option value="50">50 asientos</option>
-              <option value="100">100 asientos</option>
-              <option value="150">150 asientos</option>
-              <option value="200">200 asientos</option>
-              <option value="250">250 asientos</option>
-            </select>
-          </Field>
         </div>
 
         {error && (
@@ -231,6 +225,7 @@ ModalSala.propTypes = {
     id_sala: PropTypes.number,
   }),
   idCine: PropTypes.number,
+  salasExistentes: PropTypes.array,
   onClose: PropTypes.func.isRequired,
   onGuardado: PropTypes.func.isRequired,
 }
@@ -280,7 +275,7 @@ function construirStringHorario(dias, horaApertura, horaCierre) {
 }
 
 // ─── MODAL AGREGAR / EDITAR CINE ─────────────────────────────────────────────
-function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
+function ModalCine({ modo, cineInicial, cinesExistentes, onClose, onGuardado }) {
   const [nombreCine,       setNombreCine]       = useState(cineInicial?.nombre_cine        ?? '')
   const [direccion,        setDireccion]        = useState(cineInicial?.direccion          ?? '')
   const horarioInicial = parseHorarioInicial(cineInicial?.horarios_apertura)
@@ -308,6 +303,14 @@ function ModalCine({ modo, cineInicial, onClose, onGuardado }) {
   const handleGuardar = async () => {
     if (!nombreCine.trim() || !direccion.trim()) { setError('Completa los campos obligatorios.'); return }
     if (diasSeleccionados.length === 0) { setError('Selecciona al menos un día de atención.'); return }
+
+    // Validar nombre duplicado
+    const duplicado = cinesExistentes?.some(c =>
+      c.nombre_cine.trim().toLowerCase() === nombreCine.trim().toLowerCase() &&
+      (modo === 'crear' || c.id_cine !== cineInicial?.id_cine)
+    )
+    if (duplicado) { setError(`Ya existe un cine con el nombre "${nombreCine.trim()}".`); return }
+
     setLoading(true); setError(null)
     try {
       const horariosApertura = construirStringHorario(diasSeleccionados, horaApertura, horaCierre)
@@ -444,6 +447,7 @@ ModalCine.propTypes = {
     estado_cine: PropTypes.string,
     id_cine: PropTypes.number,
   }),
+  cinesExistentes: PropTypes.array,
   onClose: PropTypes.func.isRequired,
   onGuardado: PropTypes.func.isRequired,
 }
@@ -885,6 +889,7 @@ export default function CinesYSalas() {
           modo={modalSala}
           salaInicial={modalSala === 'editar' ? salaSeleccionada : null}
           idCine={cineSeleccionado?.id_cine}
+          salasExistentes={salasDeCine}
           onClose={() => setModalSala(null)}
           onGuardado={handleGuardadoSala}
         />
@@ -894,6 +899,7 @@ export default function CinesYSalas() {
         <ModalCine
           modo={modalCine}
           cineInicial={modalCine === 'editar' ? cineEditando : null}
+          cinesExistentes={cines}
           onClose={() => { setModalCine(null); setCineEditando(null) }}
           onGuardado={handleGuardadoCine}
         />
