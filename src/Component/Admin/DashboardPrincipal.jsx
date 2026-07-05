@@ -243,7 +243,8 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
 
   useEffect(() => {
     const token = localStorage.getItem('filmate_token')
-    fetch('/api/admin/reports/generados', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {}
+    fetch('/api/admin/reports/generados', { headers })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setReportesGen(d) })
       .catch(() => {})

@@ -4,25 +4,25 @@ import PropTypes from 'prop-types'
 const TABS = [
   { id: 'entradas', label: 'Precios de Entradas' },
   { id: 'confiteria', label: 'Costos de Confitería' },
-  { id: 'sistema', label: 'Parámetros del Sistema' },
 ]
 
 const API = '/api/admin/config'
 
+const TIPOS_SALA = ['Estándar', 'VIP', 'IMAX', '4DX']
+const FORMATOS = ['2D', '3D']
+
+const PRECIOS_DEFAULT = {
+  'Estándar': { '2D': 8.5, '3D': 11 },
+  'VIP': { '2D': 15, '3D': 18 },
+  'IMAX': { '2D': 14, '3D': 17 },
+  '4DX': { '2D': 18, '3D': 21 },
+}
+
 const VALORES_INICIALES = {
-  preciosFormato: [
-    { formato: '2D', precio: 8.5 },
-    { formato: '3D', precio: 11 },
-    { formato: 'IMAX', precio: 14 },
-  ],
-  tiposEntrada: [
-    { id: 'general', tipo: 'General', porcentaje: 100 },
-    { id: 'nino', tipo: 'Niño', porcentaje: 50 },
-    { id: 'jubilado', tipo: 'Jubilado', porcentaje: 70 },
-    { id: 'estudiante', tipo: 'Estudiante', porcentaje: 80 },
-  ],
+  preciosSalaFormato: TIPOS_SALA.flatMap(tipo_sala =>
+    FORMATOS.map(formato => ({ tipo_sala, formato, precio: PRECIOS_DEFAULT[tipo_sala]?.[formato] ?? 0 }))
+  ),
   combos: [],
-  paramsSistema: [],
 }
 
 async function apiFetch(url, opts = {}) {
@@ -400,28 +400,22 @@ export default function ConfiguracionPrecios() {
   const [toast, setToast] = useState(null)
   const combosOriginal = useRef([])
 
-  const [preciosFormato, setPreciosFormato] = useState(VALORES_INICIALES.preciosFormato)
-  const [tiposEntrada, setTiposEntrada] = useState(VALORES_INICIALES.tiposEntrada)
+  const [preciosSalaFormato, setPreciosSalaFormato] = useState(VALORES_INICIALES.preciosSalaFormato)
   const [combos, setCombos] = useState(VALORES_INICIALES.combos)
-  const [paramsSistema, setParamsSistema] = useState(VALORES_INICIALES.paramsSistema)
   const [errores, setErrores] = useState({})
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
     try {
-      const [pf, te, co, pa] = await Promise.all([
-        apiFetch(`${API}/precios-formato`).catch(() => null),
-        apiFetch(`${API}/tipos-entrada`).catch(() => null),
+      const [pf, co] = await Promise.all([
+        apiFetch(`${API}/precios-sala-formato`).catch(() => null),
         apiFetch(`${API}/confiteria`).catch(() => null),
-        apiFetch(`${API}/params`).catch(() => null),
       ])
-      if (pf) setPreciosFormato(pf.precios)
-      if (te) setTiposEntrada(te.tipos)
+      if (pf) setPreciosSalaFormato(pf.precios)
       if (co) {
         setCombos(co.productos)
         combosOriginal.current = structuredClone(co.productos)
       }
-      if (pa) setParamsSistema(pa.params)
     } catch (e) {
       error('Error al cargar datos: ' + e.message)
     } finally {
@@ -433,29 +427,13 @@ export default function ConfiguracionPrecios() {
     cargarTodo()
   }, [cargarTodo])
 
-  function handlePrecioChange(formato, value) {
+  function handlePrecioChange(tipoSala, formato, value) {
     const v = Number.parseFloat(value)
-    const errKey = `formato_${formato}`
+    const errKey = `precio_${tipoSala}_${formato}`
     validarNumero(v, errKey)
-    setPreciosFormato(prev => prev.map(p => p.formato === formato ? { ...p, precio: v || 0 } : p))
-  }
-
-  function handleTipoNombreChange(index, value) {
-    const errKey = `tipo_nombre_${index}`
-    validarTexto(value, errKey)
-    setTiposEntrada(prev => prev.map((t, idx) => idx === index ? { ...t, tipo: value } : t))
-  }
-
-  function handleTipoPctChange(index, value) {
-    const v = Number.parseInt(value) || 0
-    const errKey = `tipo_pct_${index}`
-    validarNumero(v, errKey)
-    setTiposEntrada(prev => prev.map((t, idx) => idx === index ? { ...t, porcentaje: v } : t))
-  }
-
-  function handleTipoEliminar(index) {
-    setTiposEntrada(prev => prev.filter((_, idx) => idx !== index))
-    exito('Tipo de entrada eliminado')
+    setPreciosSalaFormato(prev => prev.map(p =>
+      p.tipo_sala === tipoSala && p.formato === formato ? { ...p, precio: v || 0 } : p
+    ))
   }
 
   function handleComboNombreChange(id, value) {
@@ -474,49 +452,9 @@ export default function ConfiguracionPrecios() {
     exito(`"${nombre}" eliminado`)
   }
 
-  function handleParamChange(item, value) {
-    const errKey = `param_${item.clave}`
-    if (item.tipo_dato === 'number') {
-      validarNumero(Number.parseFloat(value), errKey)
-    } else {
-      validarTexto(value, errKey)
-    }
-  }
-
-  async function handleParamSave(item) {
-    const el = document.getElementById(`param-${item.clave}`)
-    if (!el) return
-    if (item.tipo_dato === 'number' && (Number.isNaN(Number.parseFloat(el.value)) || Number.parseFloat(el.value) < 0)) {
-      error(`"${item.clave}" debe ser un número válido`)
-      return
-    }
-    const nuevoValor = el.value
-    setSaving(true)
-    try {
-      await apiFetch(`${API}/params/${item.clave}`, {
-        method: 'PUT',
-        body: JSON.stringify({ valor: nuevoValor }),
-      })
-      setParamsSistema(prev => prev.map(p => p.clave === item.clave ? { ...p, valor: nuevoValor } : p))
-      exito(`"${item.clave}" actualizado correctamente`)
-    } catch (e) {
-      error(e.message || 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function guardarPreciosFormato() {
-    const body = { precios: preciosFormato }
-    await apiFetch(`${API}/precios-formato`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    })
-  }
-
-  async function guardarTiposEntrada() {
-    const body = { tipos: tiposEntrada }
-    await apiFetch(`${API}/tipos-entrada`, {
+  async function guardarPreciosSalaFormato() {
+    const body = { precios: preciosSalaFormato }
+    await apiFetch(`${API}/precios-sala-formato`, {
       method: 'PUT',
       body: JSON.stringify(body),
     })
@@ -575,15 +513,6 @@ export default function ConfiguracionPrecios() {
     return true
   }
 
-  function validarTexto(valor, campo) {
-    if (!valor?.trim()) {
-      setErrores(prev => ({ ...prev, [campo]: 'Este campo no puede estar vacío' }))
-      return false
-    }
-    setErrores(prev => ({ ...prev, [campo]: null }))
-    return true
-  }
-
   if (loading) {
     return (
       <div className="cp-page">
@@ -627,119 +556,60 @@ export default function ConfiguracionPrecios() {
       </div>
 
       {activeTab === 'entradas' && (
-        <div className="cp-two-col">
-
-          <div className="cp-card">
-            <div className="cp-card-header">
-              <div className="cp-card-title">Precios Base por Formato</div>
-              <p className="cp-card-desc">
-                Define el precio base de la entrada según el formato de la sala (2D, 3D, IMAX).
-              </p>
-            </div>
-            <div className="cp-card-body">
-              {preciosFormato.map(item => {
-                const errKey = `formato_${item.formato}`
-                return (
-                  <div key={item.formato} className="cp-formato-row">
-                    <span className="cp-formato-badge">{item.formato}</span>
-                    <div>
-                      <div className="cp-input-prefix-wrap">
-                        <span className="cp-input-prefix">S/</span>
-                        <input
-                          type="number" step="0.01" min="0"
-                          value={item.precio}
-                          onChange={e => handlePrecioChange(item.formato, e.target.value)}
-                          className={`cp-input${errores[errKey] ? ' error' : ''}`}
-                        />
-                      </div>
-                      {errores[errKey] && <span className="cp-error-msg">{errores[errKey]}</span>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="cp-card-footer">
-              <button
-                className="cp-btn cp-btn-primary"
-                onClick={() => handleSave('Precios base guardados correctamente', guardarPreciosFormato)}
-                disabled={saving}
-              >
-                {saving ? 'Guardando…' : 'Guardar Precios Base'}
-              </button>
-            </div>
+        <div className="cp-card">
+          <div className="cp-card-header">
+            <div className="cp-card-title">Precios por Tipo de Sala y Formato</div>
+            <p className="cp-card-desc">
+              Define el precio base de la entrada según el tipo de sala (Estándar, VIP, IMAX, 4DX) y el formato (2D, 3D).
+            </p>
           </div>
-
-          <div className="cp-card">
-            <div className="cp-card-header">
-              <div className="cp-card-title">Tipos de Entrada</div>
-              <p className="cp-card-desc">
-                Define los tipos de entrada y su porcentaje respecto al precio base. Ej: General al 100%, Niño al 50%.
-              </p>
-            </div>
-            <div className="cp-card-body">
-              {tiposEntrada.length === 0 && (
-                <div className="cp-empty">
-                  <div className="cp-empty-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                    </svg>
-                  </div>
-                  <p className="cp-empty-text">No hay tipos de entrada. Presione "+ Agregar Tipo" para crear uno.</p>
-                </div>
-              )}
-              {tiposEntrada.map((item, i) => {
-                const errKeyT = `tipo_nombre_${i}`
-                const errKeyP = `tipo_pct_${i}`
-                return (
-                  <div key={item.id} className="cp-tipo-row">
-                    <div>
-                      <input
-                        type="text" value={item.tipo} placeholder="Nombre del tipo"
-                        onChange={e => handleTipoNombreChange(i, e.target.value)}
-                        className={`cp-input${errores[errKeyT] ? ' error' : ''}`}
-                      />
-                      {errores[errKeyT] && <span className="cp-error-msg">{errores[errKeyT]}</span>}
-                    </div>
-                    <div className="cp-tipo-pct-wrap">
-                      <div style={{ flex: 1 }}>
-                        <input
-                          type="number" step="1" min="0" max="200" value={item.porcentaje}
-                          onChange={e => handleTipoPctChange(i, e.target.value)}
-                          className={`cp-input${errores[errKeyP] ? ' error' : ''}`}
-                          style={{ textAlign: 'center' }}
-                        />
-                        {errores[errKeyP] && <span className="cp-error-msg">{errores[errKeyP]}</span>}
-                      </div>
-                      <span className="cp-pct-sym">%</span>
-                    </div>
-                    <button className="cp-btn-icon" title="Eliminar tipo" onClick={() => handleTipoEliminar(i)}>×</button>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="cp-card-footer" style={{ justifyContent: 'space-between' }}>
-              <button
-                className="cp-btn cp-btn-secondary"
-                onClick={() => setTiposEntrada(prev => [...prev, { id: Date.now(), tipo: '', porcentaje: 100 }])}
-              >
-                + Agregar Tipo
-              </button>
-              <button
-                className="cp-btn cp-btn-primary"
-                disabled={saving}
-                onClick={() => {
-                  if (tiposEntrada.some(t => !t.tipo.trim())) {
-                    error('Completa los nombres de los tipos antes de guardar')
-                    return
-                  }
-                  handleSave('Tipos de entrada guardados correctamente', guardarTiposEntrada)
-                }}
-              >
-                {saving ? 'Guardando…' : 'Guardar Tipos'}
-              </button>
-            </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="cp-table" style={{ minWidth: 500 }}>
+              <thead>
+                <tr>
+                  <th>Tipo de Sala</th>
+                  {FORMATOS.map(fmt => (
+                    <th key={fmt} className="right">{fmt}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TIPOS_SALA.map(tipo_sala => (
+                  <tr key={tipo_sala}>
+                    <td style={{ fontWeight: 600, color: T.text }}>{tipo_sala}</td>
+                    {FORMATOS.map(formato => {
+                      const item = preciosSalaFormato.find(p => p.tipo_sala === tipo_sala && p.formato === formato)
+                      const errKey = `precio_${tipo_sala}_${formato}`
+                      return (
+                        <td key={formato} className="right">
+                          <div className="cp-input-prefix-wrap" style={{ display: 'inline-block', width: 140 }}>
+                            <span className="cp-input-prefix">S/</span>
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={item?.precio ?? 0}
+                              onChange={e => handlePrecioChange(tipo_sala, formato, e.target.value)}
+                              className={`cp-input${errores[errKey] ? ' error' : ''}`}
+                              style={{ textAlign: 'right' }}
+                            />
+                          </div>
+                          {errores[errKey] && <span className="cp-error-msg">{errores[errKey]}</span>}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
+          <div className="cp-card-footer">
+            <button
+              className="cp-btn cp-btn-primary"
+              onClick={() => handleSave('Precios guardados correctamente', guardarPreciosSalaFormato)}
+              disabled={saving}
+            >
+              {saving ? 'Guardando…' : 'Guardar Precios'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -842,52 +712,6 @@ export default function ConfiguracionPrecios() {
             >
               {saving ? 'Guardando…' : 'Guardar Cambios'}
             </button>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'sistema' && (
-        <div className="cp-card">
-          <div className="cp-card-header">
-            <div className="cp-card-title">Variables Operativas del Sistema</div>
-            <p className="cp-card-desc">
-              Parámetros globales que afectan el comportamiento del negocio. Cada uno se guarda individualmente.
-            </p>
-          </div>
-          <div className="cp-card-body">
-            {paramsSistema.map(item => {
-              const errKey = 'param_' + item.clave
-              const err = errores[errKey]
-              return (
-              <div key={item.clave} className="cp-param-row">
-                <div>
-                  <div className="cp-param-key">{item.clave}</div>
-                  <div className="cp-param-desc">{item.descripcion}</div>
-                </div>
-                <div>
-                  <input
-                    type={item.tipo_dato === 'number' ? 'number' : 'text'}
-                    step={item.tipo_dato === 'number' ? '0.01' : undefined}
-                    defaultValue={item.valor}
-                    id={'param-' + item.clave}
-                    onChange={e => handleParamChange(item, e.target.value)}
-                    className={'cp-input' + (err ? ' error' : '')}
-                  />
-                  {err && (
-                    <span className="cp-error-msg">{err}</span>
-                  )}
-                </div>
-                <button
-                  className="cp-btn cp-btn-primary"
-                  disabled={saving}
-                  onClick={() => handleParamSave(item)}
-                  style={{ fontSize: 13 }}
-                >
-                  {saving ? 'Guardando…' : 'Guardar'}
-                </button>
-              </div>
-              )
-            })}
           </div>
         </div>
       )}
