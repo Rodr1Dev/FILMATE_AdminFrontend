@@ -34,8 +34,11 @@ const SHOWTIMES_BASE    = '/api/admin/showtimes'
 const CINEMAS_BASE      = '/api/cinemas'
 
 async function apiFetch(url, opts = {}) {
+  const token = localStorage.getItem('filmate_token')
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts,
   })
   if (!res.ok) {
@@ -45,8 +48,17 @@ async function apiFetch(url, opts = {}) {
   return res.json()
 }
 
-function safeApiFetch(url, fallback) {
-  return apiFetch(url).catch(() => fallback)
+async function safeApiFetch(url, fallback) {
+  try {
+    const token = localStorage.getItem('filmate_token')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(url, { headers })
+    if (!res.ok) return fallback
+    return res.json()
+  } catch {
+    return fallback
+  }
 }
 
 function ensureArray(data) {
@@ -259,11 +271,16 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
     setRefreshing(isAutoRefresh)
     setLoading(!isAutoRefresh)
     try {
+      const permisos = JSON.parse(localStorage.getItem('filmate_permisos') || '[]')
+      const puedeReembolsos = permisos.includes('GESTIONAR_REEMBOLSOS')
       const periodoApi = PERIOD_MAP[period]?.api ?? 'mes'
+      const reembPromise = puedeReembolsos
+        ? apiFetch(`${REEMBOLSOS_BASE}/metricas`)
+        : Promise.resolve({ pendientes: 0 })
       const [dash, txData, reembData, roomsData, showtimes, cinemasData] = await Promise.all([
         apiFetch(`${DASHBOARD_BASE}/?periodo=${periodoApi}`),
         apiFetch(`${TRANSACTIONS_BASE}/?page=1&limit=500`),
-        safeApiFetch(`${REEMBOLSOS_BASE}/metricas`, { pendientes: 0 }),
+        reembPromise,
         safeApiFetch(`${ROOMS_BASE}/`, []),
         safeApiFetch(`${SHOWTIMES_BASE}/`, []),
         safeApiFetch(`${CINEMAS_BASE}/`, []),

@@ -6,8 +6,11 @@ const ADMIN_REEMBOLSOS   = '/api/admin/reembolsos'
 
 async function apiFetch(url, opts = {}) {
   if (!url.startsWith('/api/')) throw new Error('URL no permitida')
+  const token = localStorage.getItem('filmate_token')
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts,
   })
   if (!res.ok) {
@@ -651,7 +654,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
     .filter(Boolean)
     .join(', ') || data.codigo_qr_token || '—'
 
-  const pendienteSolicitud = solicitudes.find(s => s.estado_solicitud === 'Evaluacion')
+  const pendienteSolicitud = solicitudes.some(s => s.estado_solicitud === 'Evaluacion')
 
   const historialTx = [
     { label: 'Transacción completada',           fecha: data.fecha_transaccion },
