@@ -7,41 +7,66 @@ const API_BASE = '/api'
 const ADMIN = `${API_BASE}/admin/movies`
 const TMDB  = `${API_BASE}/admin/movies/tmdb`
 
+const authHeaders = () => {
+  const token = localStorage.getItem('filmate_token')
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  return headers
+}
+
+const handle = async (res) => {
+  if (res.status === 401) {
+    localStorage.removeItem('filmate_token')
+    localStorage.removeItem('filmate_user')
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || res.statusText)
+  }
+  const ct = res.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) return null
+  return res.json()
+}
+
 const api = {
-  list:    (skip = 0, limit = 200) => fetch(`${ADMIN}/?skip=${skip}&limit=${limit}`).then(r => r.json()),
-  details: (id)                    => fetch(`${API_BASE}/movies/${id}/details`).then(r => r.json()),
+  list:    (skip = 0, limit = 200) => fetch(`${ADMIN}/?skip=${skip}&limit=${limit}`, { headers: authHeaders() }).then(handle),
+  details: (id)                    => fetch(`${API_BASE}/movies/${id}/details`, { headers: authHeaders() }).then(handle),
   create:  (body)                  => fetch(`${ADMIN}/`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+  }).then(handle),
   update:  (id, body)              => fetch(`${ADMIN}/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
-  delete:  (id)                    => fetch(`${ADMIN}/${id}`, {
-    method: 'DELETE',
-  }).then(async r => {
-    if (!r.ok) throw new Error(r.statusText)
-    const t = await r.text()
-    return t ? JSON.parse(t) : {}
-  }),
-  genres:          () => fetch(`${ADMIN}/meta/genres`).then(r => r.json()),
-  classifications: () => fetch(`${ADMIN}/meta/classifications`).then(r => r.json()),
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(body),
+  }).then(handle),
+  delete:  async (id) => {
+    const res = await fetch(`${ADMIN}/${id}`, { method: 'DELETE', headers: authHeaders() })
+    if (res.status === 401) {
+      localStorage.removeItem('filmate_token')
+      localStorage.removeItem('filmate_user')
+    }
+    if (!res.ok) throw new Error(res.statusText)
+    return null
+  },
+  genres:          () => fetch(`${ADMIN}/meta/genres`, { headers: authHeaders() }).then(handle),
+  classifications: () => fetch(`${ADMIN}/meta/classifications`, { headers: authHeaders() }).then(handle),
   tmdbSearch:  async (q) => {
     if (!q || q.trim().length < 3) return []
     try {
-      const r = await fetch(`${TMDB}/search?query=${encodeURIComponent(q.trim())}`)
+      const r = await fetch(`${TMDB}/search?query=${encodeURIComponent(q.trim())}`, { headers: authHeaders() })
       if (!r.ok) return []
-      const data = await r.json()
-      return Array.isArray(data) ? data : (data.results || [])
+      const data = await r.json().catch(() => null)
+      if (Array.isArray(data)) return data
+      if (data && Array.isArray(data.results)) return data.results
+      return []
     } catch { return [] }
   },
   tmdbPreview: async (id) => {
-    const r = await fetch(`${TMDB}/${id}/preview`)
+    const r = await fetch(`${TMDB}/${id}/preview`, { headers: authHeaders() })
     if (!r.ok) throw new Error(await r.text())
     return r.json()
   },
   tmdbCreate:  (id, body) => fetch(`${TMDB}/${id}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }).then(async r => { if (!r.ok) { const e = await r.text(); throw new Error(e) } return r.json() }),
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+  }).then(handle),
 }
 
 function extractString(value) {
@@ -1023,8 +1048,8 @@ export default function CatalogoPeliculas() {
         api.genres(),
         api.classifications(),
       ])
-      setGenres(genresData || [])
-      setClassifications((classificationsData || []).map(c => typeof c === 'string' ? c : c.nombre))
+      setGenres(Array.isArray(genresData) ? genresData : [])
+      setClassifications(Array.isArray(classificationsData) ? classificationsData.map(c => typeof c === 'string' ? c : c.nombre) : [])
     } catch (e) {
       setErrorMsg(`Error cargando filtros: ${e.message}`)
     }
