@@ -3,6 +3,9 @@ import PropTypes from 'prop-types'
 import { AuthContext } from './AuthContext.js'
 
 const USER_KEY = 'filmate_user'
+const PERMISOS_KEY = 'filmate_permisos'
+
+const API = '/api/auth'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -13,8 +16,31 @@ export function AuthProvider({ children }) {
       return null
     }
   })
+  const [permisos, setPermisos] = useState(() => {
+    try {
+      const stored = localStorage.getItem(PERMISOS_KEY)
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
   const [loading, setLoading] = useState(false)
   const [verifying, setVerifying] = useState(true)
+
+  const fetchPermisos = useCallback(async () => {
+    const token = localStorage.getItem('filmate_token')
+    if (!token) return
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    try {
+      const res = await fetch(`${API}/me/permisos`, { headers })
+      if (!res.ok) return
+      const data = await res.json()
+      localStorage.setItem(PERMISOS_KEY, JSON.stringify(data))
+      setPermisos(data)
+    } catch {
+      // ignore
+    }
+  }, [])
 
   const login = useCallback(async (correo, contrasena) => {
     setLoading(true)
@@ -31,8 +57,8 @@ export function AuthProvider({ children }) {
       const data = await res.json()
       const userData = data.user
 
-      if (!userData.roles?.includes(1)) {
-        throw new Error('Acceso denegado. Solo los administradores pueden ingresar al panel.')
+      if (!userData.roles?.some(r => r === 1 || r === 3)) {
+        throw new Error('Acceso denegado. Solo administradores o superadmins pueden ingresar al panel.')
       }
 
       localStorage.setItem(USER_KEY, JSON.stringify(userData))
@@ -40,16 +66,19 @@ export function AuthProvider({ children }) {
         localStorage.setItem('filmate_token', data.access_token)
       }
       setUser(userData)
+      await fetchPermisos()
       return userData
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fetchPermisos])
 
   const logout = useCallback(() => {
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem('filmate_token')
+    localStorage.removeItem(PERMISOS_KEY)
     setUser(null)
+    setPermisos([])
   }, [])
 
   useEffect(() => {
@@ -60,19 +89,24 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('filmate_token')
     const headers = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
-    fetch('/api/admin/rooms/?limit=1', { headers })
-      .then(res => {
-        if (!res.ok) throw new Error('Sesión inválida')
+    Promise.all([
+      fetch('/api/admin/notifications/', { headers }),
+      fetchPermisos(),
+    ])
+      .then(([notifRes]) => {
+        if (!notifRes.ok) throw new Error('Sesión inválida')
       })
       .catch(() => {
         localStorage.removeItem(USER_KEY)
         localStorage.removeItem('filmate_token')
+        localStorage.removeItem(PERMISOS_KEY)
         setUser(null)
+        setPermisos([])
       })
       .finally(() => setVerifying(false))
-  }, [user])
+  }, [user, fetchPermisos])
 
-  const value = useMemo(() => ({ user, login, logout, loading, verifying }), [user, login, logout, loading, verifying])
+  const value = useMemo(() => ({ user, permisos, login, logout, loading, verifying }), [user, permisos, login, logout, loading, verifying])
 
   return (
     <AuthContext.Provider value={value}>

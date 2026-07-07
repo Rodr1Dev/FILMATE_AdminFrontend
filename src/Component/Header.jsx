@@ -1,17 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth.js'
 
-const NOTIFICATIONS = [
-  { id: 1, type: 'warning', text: 'Reembolso pendiente de revisión', time: 'Hace 10 min' },
-  { id: 2, type: 'info',    text: 'Se registró una nueva transacción',  time: 'Hace 1 hora' },
-  { id: 3, type: 'success', text: 'Solicitud de reembolso aprobada',   time: 'Hace 3 horas' },
-]
+const API = '/api/admin/notifications';
+
+async function apiFetch(url, opts = {}) {
+  const token = localStorage.getItem("filmate_token");
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { headers, ...opts });
+  if (res.status === 401) {
+    localStorage.removeItem("filmate_token");
+    localStorage.removeItem("filmate_user");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
 
 const COLORS = {
   warning: { dot: '#FFB300', bg: '#FFF8E1' },
   info:    { dot: '#283593', bg: '#EEF2FF' },
   success: { dot: '#008236', bg: '#DCFCE7' },
+  error:   { dot: '#DC2626', bg: '#FEF2F2' },
+}
+
+function tiempoRelativo(iso) {
+  if (!iso) return '';
+  const ahora = Date.now();
+  const diff = ahora - new Date(iso).getTime();
+  const seg = Math.floor(diff / 1000);
+  if (seg < 60) return 'Hace unos segundos';
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `Hace ${min} min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `Hace ${hrs} hora${hrs > 1 ? 's' : ''}`;
+  const dias = Math.floor(hrs / 24);
+  return `Hace ${dias} día${dias > 1 ? 's' : ''}`;
 }
 
 export default function Header() {
@@ -19,15 +46,43 @@ export default function Header() {
   const navigate = useNavigate()
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [notifs, setNotifs] = useState(NOTIFICATIONS)
+  const [notifs, setNotifs] = useState([])
+  const [noLeidas, setNoLeidas] = useState(0)
+  const [cargando, setCargando] = useState(false)
   const notifRef = useRef(null)
   const profileRef = useRef(null)
+  const yaCargo = useRef(false)
 
   const initials = user?.nombre
     ? user.nombre.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     : '??'
 
-  const roleLabel = user?.roles?.includes(1) ? 'Administrador' : 'Usuario'
+  let roleLabel = 'Usuario'
+  if (user?.roles?.includes(3)) roleLabel = 'Superadmin'
+  else if (user?.roles?.includes(1)) roleLabel = 'Administrador'
+
+  const cargarNotifs = useCallback(async () => {
+    setCargando(true)
+    try {
+      const [data, cnt] = await Promise.all([
+        apiFetch(`${API}/?page=1&limit=50`),
+        apiFetch(`${API}/count`),
+      ])
+      setNotifs(data.data || [])
+      setNoLeidas(cnt.count || 0)
+    } catch {
+      // silencioso
+    } finally {
+      setCargando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!yaCargo.current) {
+      yaCargo.current = true
+      cargarNotifs()
+    }
+  }, [cargarNotifs])
 
   useEffect(() => {
     function handleClick(e) {
@@ -38,17 +93,33 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  function handleOpenNotifs() {
+    setNotifOpen(o => !o)
+    setProfileOpen(false)
+    if (!notifOpen) cargarNotifs()
+  }
+
+  async function dismissNotification(id) {
+    setNotifs(current => current.filter(x => x.id_notificacion !== id))
+    setNoLeidas(prev => Math.max(0, prev - 1))
+    try {
+      await apiFetch(`${API}/${id}/read`, { method: 'PUT' })
+    } catch { /* silencioso */ }
+  }
+
+  async function marcarTodasLeidas() {
+    setNotifs([])
+    setNoLeidas(0)
+    try {
+      await apiFetch(`${API}/read-all`, { method: 'PUT' })
+    } catch { /* silencioso */ }
+  }
+
   function handleLogout() {
     setProfileOpen(false)
     logout()
     navigate('/login')
   }
-
-    function dismissNotification(id) {
-    setNotifs(current => current.filter(x => x.id !== id))
-  }
-
-  const unread = notifs.length
 
   const CARD = {
     position: 'absolute', top: 56,
@@ -73,7 +144,7 @@ export default function Header() {
       {/* Campana */}
       <div style={{ position: 'relative' }} ref={notifRef}>
         <button
-          onClick={() => { setNotifOpen(o => !o); setProfileOpen(false) }}
+          onClick={handleOpenNotifs}
           style={{
             position: 'relative',
             background: 'transparent',
@@ -95,7 +166,7 @@ export default function Header() {
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          {unread > 0 && (
+          {noLeidas > 0 && (
             <span style={{
               position: 'absolute', top: 4, right: 4, width: 9, height: 9,
               background: '#EF4444', borderRadius: '50%', border: '2px solid #fff',
@@ -109,36 +180,49 @@ export default function Header() {
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#121212' }}>Notificaciones</span>
-              <button onClick={() => setNotifs([])}
-                style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                Limpiar todo
-              </button>
+              {notifs.length > 0 && (
+                <button onClick={marcarTodasLeidas}
+                  style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  Limpiar todo
+                </button>
+              )}
             </div>
             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-              {notifs.length === 0 ? (
-                <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>
-                  No hay notificaciones
-                </div>
-              ) : notifs.map(n => (
-                <button type="button" key={n.id} onClick={() => dismissNotification(n.id)}
-                  style={{
-                    display: 'flex', gap: 12, padding: '12px 18px', alignItems: 'flex-start',
-                    cursor: 'pointer', width: '100%', fontFamily: 'inherit',
-                    fontSize: 'inherit', textAlign: 'left', background: 'transparent',
-                    border: 'none', borderBottom: '1px solid #F3F4F6',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: COLORS[n.type]?.dot || '#9CA3AF', marginTop: 5, flexShrink: 0,
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 13, color: '#121212' }}>{n.text}</p>
-                    <p style={{ margin: '3px 0 0', fontSize: 11, color: '#9CA3AF' }}>{n.time}</p>
+              {(() => {
+                if (cargando && notifs.length === 0) return (
+                  <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>
+                    Cargando...
                   </div>
-                </button>
-              ))}
+                );
+                if (notifs.length === 0) return (
+                  <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>
+                    No hay notificaciones
+                  </div>
+                );
+                return notifs.map(n => (
+                  <button type="button" key={n.id_notificacion} onClick={() => dismissNotification(n.id_notificacion)}
+                    style={{
+                      display: 'flex', gap: 12, padding: '12px 18px', alignItems: 'flex-start',
+                      cursor: 'pointer', width: '100%', fontFamily: 'inherit',
+                      fontSize: 'inherit', textAlign: 'left', background: n.leida ? 'transparent' : '#F9FAFB',
+                      border: 'none', borderBottom: '1px solid #F3F4F6',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F3F4F6'}
+                    onMouseLeave={e => e.currentTarget.style.background = n.leida ? 'transparent' : '#F9FAFB'}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: COLORS[n.tipo]?.dot || '#9CA3AF', marginTop: 5, flexShrink: 0,
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, color: '#121212', fontWeight: n.leida ? 400 : 600 }}>
+                        {n.titulo}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6B7280' }}>{n.mensaje}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#9CA3AF' }}>{tiempoRelativo(n.fecha_creacion)}</p>
+                    </div>
+                  </button>
+                ));
+              })()}
             </div>
           </div>
         )}

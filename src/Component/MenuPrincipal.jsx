@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import PropTypes from 'prop-types'
+import { useAuth } from '../context/useAuth.js'
 
 const ICONS = {
   grid:        "M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z",
@@ -29,14 +30,14 @@ Icon.propTypes = {
 }
 
 const NAV_ITEMS = [
-  { label: 'Dashboard Principal',     icon: 'grid' },
-  { label: 'Reportes',                icon: 'chart-bar' },
-  { label: 'Catálogo de Películas',   icon: 'movie' },
-  { label: 'Cines y Salas',           icon: 'building' },
-  { label: 'Programación',            icon: 'calendar' },
-  { label: 'Ventas y Tickets',        icon: 'ticket' },
-  { label: 'Usuarios y Roles',        icon: 'users' },
-  { label: 'Configuración y Precios', icon: 'settings' },
+  { label: 'Dashboard Principal',     icon: 'grid',     permiso: 'VER_DASHBOARD' },
+  { label: 'Reportes',                icon: 'chart-bar', permiso: 'VER_REPORTES' },
+  { label: 'Catálogo de Películas',   icon: 'movie',    permiso: 'GESTIONAR_PELICULAS' },
+  { label: 'Cines y Salas',           icon: 'building', permiso: 'GESTIONAR_CINES' },
+  { label: 'Programación',            icon: 'calendar', permiso: 'GESTIONAR_FUNCIONES' },
+  { label: 'Ventas y Tickets',        icon: 'ticket',   permiso: 'GESTIONAR_TRANSACCIONES' },
+  { label: 'Usuarios y Roles',        icon: 'users',    permiso: null },
+  { label: 'Configuración y Precios', icon: 'settings', permiso: 'GESTIONAR_CONFIGURACION' },
 ]
 
 const CSS = `
@@ -125,6 +126,13 @@ export default function MenuPrincipal({ activeIndex, onNavigate }) {
   const [localActive, setLocalActive] = useState(0)
   const active = activeIndex ?? localActive
   const setActive = onNavigate || setLocalActive
+  const { user, permisos } = useAuth()
+  const isSuperadmin = user?.roles?.includes(3)
+
+  function tienePermiso(permiso) {
+    if (!permiso) return false
+    return permisos?.includes(permiso)
+  }
 
   return (
     <>
@@ -135,21 +143,25 @@ export default function MenuPrincipal({ activeIndex, onNavigate }) {
           <div className="sb-logo-icon">F</div>
           <div>
             <div className="sb-logo-name">Filmate</div>
-            <div className="sb-logo-role">Administrador</div>
+            <div className="sb-logo-role">{isSuperadmin ? 'Superadmin' : 'Administrador'}</div>
           </div>
         </div>
 
         <nav className="sb-nav">
-          {NAV_ITEMS.map((item, i) => (
-            <button
-              key={item.label}
-              className={`sb-item${active === i ? ' sb-active' : ''}`}
-              onClick={() => setActive(i)}
-            >
-              <span className="sb-item-icon"><Icon name={item.icon} /></span>
-              <span className="sb-item-label">{item.label}</span>
-            </button>
-          ))}
+          {NAV_ITEMS.map((item, i) => {
+            if (i === 6 && !isSuperadmin) return null
+            if (item.permiso && !tienePermiso(item.permiso)) return null
+            return (
+              <button
+                key={item.label}
+                className={`sb-item${active === i ? ' sb-active' : ''}`}
+                onClick={() => setActive(i)}
+              >
+                <span className="sb-item-icon"><Icon name={item.icon} /></span>
+                <span className="sb-item-label">{item.label}</span>
+              </button>
+            )
+          })}
         </nav>
 
         <div className="sb-footer">
