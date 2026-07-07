@@ -9,10 +9,14 @@ const API_CINEMAS   = '/api/admin/cinemas'
 const API_ROOMS     = '/api/admin/rooms'
 
 async function apiFetch(url, opts = {}) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  })
+  const token = localStorage.getItem('filmate_token')
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(url, { ...opts, headers })
+  if (res.status === 401) {
+    localStorage.removeItem('filmate_token')
+    localStorage.removeItem('filmate_user')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || res.statusText)
