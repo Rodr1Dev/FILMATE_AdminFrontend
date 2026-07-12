@@ -27,6 +27,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false)
   const [verifying, setVerifying] = useState(true)
 
+  const refreshPermisos = useCallback(async () => {
+    const token = localStorage.getItem('filmate_token')
+    const storedUser = localStorage.getItem(USER_KEY)
+    if (!token || !storedUser) return
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    try {
+      const res = await fetch(`${API}/me/permisos`, { headers })
+      if (!res.ok) return
+      const data = await res.json()
+      localStorage.setItem(PERMISOS_KEY, JSON.stringify(data))
+      setPermisos(data)
+    } catch {
+      // ignore
+    }
+  }, [])
+
   const fetchPermisos = useCallback(async () => {
     const token = localStorage.getItem('filmate_token')
     if (!token) return
@@ -106,7 +122,14 @@ export function AuthProvider({ children }) {
       .finally(() => setVerifying(false))
   }, [user, fetchPermisos])
 
-  const value = useMemo(() => ({ user, permisos, login, logout, loading, verifying }), [user, permisos, login, logout, loading, verifying])
+  useEffect(() => {
+    if (!user) return
+    const onFocus = () => refreshPermisos()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [user, refreshPermisos])
+
+  const value = useMemo(() => ({ user, permisos, login, logout, loading, verifying, refreshPermisos }), [user, permisos, login, logout, loading, verifying, refreshPermisos])
 
   return (
     <AuthContext.Provider value={value}>

@@ -9,7 +9,7 @@ const FAQS = [
   { q: '¿Cómo proceso un reembolso?',
     a: 'En "Ventas y Tickets" > "Detalle de Compra", selecciona una transacción aprobada y haz clic en "Solicitar Reembolso". Luego en "Devoluciones y Reembolsos" puedes resolver la solicitud.' },
   { q: '¿Cómo valido una entrada en puerta?',
-    a: 'Ve a "Ventas y Tickets" > "Validación de Entradas". Escanea el código QR del ticket o pega el código en el campo de texto.' },
+    a: 'Ve a "Ventas y Tickets" > "Validar Entrada". Ingresa o pega el código de entrada en el campo de texto.' },
   { q: '¿Qué hago si el sistema no carga?',
     a: 'Verifica que el backend esté corriendo en localhost:8000. Revisa la consola del navegador (F12) para errores. Si el problema persiste, contacta a soporte técnico.' },
   { q: '¿Cómo uso la integración con TMDB para agregar películas?',

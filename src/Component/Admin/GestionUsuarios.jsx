@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import {
   Search, Pencil, Eye, KeyRound, X, Check, Mail,
   Shield, RefreshCw, Link as LinkIcon, Calendar, Trash2, AlertTriangle,
 } from "lucide-react";
+import { useAuth } from '../../context/useAuth.js';
 
 const API = "/api/admin";
 const ESTADOS_VALUES = ["Activo", "Suspendido", "Pendiente verificación"];
@@ -12,7 +13,7 @@ const MODULOS_DISPONIBLES = ["ADMINISTRACIÓN", "VENTAS Y TICKETS", "OPERACIONES
 const MODULOS_POR_ROL = {
   ADMINISTRADOR: ["ADMINISTRACIÓN", "VENTAS Y TICKETS"],
   TAQUILLA: ["VENTAS Y TICKETS"],
-  DULCERÍA: ["VENTAS Y TICKETS"],
+  DULCERIA: ["VENTAS Y TICKETS"],
   CLIENTE: ["OPERACIONES CLIENTE", "SOCIAL"],
 };
 
@@ -109,14 +110,17 @@ function CambiarContrasenaModal({ open, onClose, usuario }) {
   async function handleAutomatica() {
     setGuardando(true);
     try {
-      const pass = "Filmate.2026*";
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+      const rand = new Uint8Array(14)
+      crypto.getRandomValues(rand)
+      const pass = Array.from(rand).map(b => chars[b % chars.length]).join('')
       await apiFetch(`${API}/users/${usuario.id_usuario}/password`, {
         method: "PUT",
         body: JSON.stringify({ contrasena: pass }),
       });
-      setMensaje("Contraseña generada y enviada al correo del usuario.");
+      setMensaje(`Contraseña generada: ${pass}. Se recomienda copiar y compartir con el usuario.`);
     } catch (e) {
-      alert("Error: " + e.message);
+      setMensaje("Error: " + e.message);
     } finally {
       setGuardando(false);
     }
@@ -131,7 +135,7 @@ function CambiarContrasenaModal({ open, onClose, usuario }) {
       });
       setMensaje(enviarCorreo ? "Contraseña actualizada. Se envió un correo de confirmación al usuario." : "Contraseña actualizada correctamente.");
     } catch (e) {
-      alert("Error: " + e.message);
+      setMensaje("Error: " + e.message);
     } finally {
       setGuardando(false);
     }
@@ -140,9 +144,12 @@ function CambiarContrasenaModal({ open, onClose, usuario }) {
   async function handleEnlace() {
     setGuardando(true);
     try {
+      await apiFetch(`${API}/users/${usuario.id_usuario}/reset-link`, {
+        method: "POST",
+      });
       setMensaje("Enlace de reinicio enviado al correo del usuario.");
     } catch (e) {
-      alert("Error: " + e.message);
+      setMensaje("Error: " + e.message);
     } finally {
       setGuardando(false);
     }
@@ -242,9 +249,10 @@ function CambiarContrasenaModal({ open, onClose, usuario }) {
 CambiarContrasenaModal.propTypes = { open: PropTypes.bool, onClose: PropTypes.func, usuario: PropTypes.object };
 
 function EditarUsuarioModal({ open, onClose, usuario, onSave, rolesDisponibles }) {
-  const [form, setForm] = useState(usuario || {});
+  const [form, setForm] = useState({ nombre: "", correo: "", estado: "Activo" });
   const [tipoUsuario, setTipoUsuario] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
 
   React.useEffect(() => {
     if (usuario) {
@@ -286,7 +294,7 @@ function EditarUsuarioModal({ open, onClose, usuario, onSave, rolesDisponibles }
       onSave({ ...usuario, ...form });
       onClose();
     } catch (e) {
-      alert("Error al guardar: " + e.message);
+      setError("Error al guardar: " + e.message);
     } finally {
       setGuardando(false);
     }
@@ -295,6 +303,9 @@ function EditarUsuarioModal({ open, onClose, usuario, onSave, rolesDisponibles }
   return (
     <Modal open={open} onClose={onClose} title={`Editar usuario · ${usuario.id_usuario}`}>
       <div className="space-y-4">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
+        )}
         <div>
           <label htmlFor="edit-nombre" className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
           <input id="edit-nombre" value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
@@ -434,7 +445,7 @@ function DirectorioUsuarios({ rolesDisponibles }) {
       });
       const matchEstado = !estadoFiltro || u.estado === estadoFiltro;
       const q = busqueda.trim().toLowerCase();
-      const matchBusqueda = !q || u.nombre.toLowerCase().includes(q) || u.correo.toLowerCase().includes(q) || String(u.id_usuario).includes(q);
+      const matchBusqueda = !q || u.nombre.toLowerCase().includes(q) || u.correo.toLowerCase().includes(q) || String(u.id_usuario).includes(q) || (u.numero_documento || '').includes(q);
       return matchTipo && matchEstado && matchBusqueda;
     });
   }, [usuarios, tipoFiltro, estadoFiltro, busqueda]);
@@ -486,9 +497,7 @@ function DirectorioUsuarios({ rolesDisponibles }) {
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm flex items-start gap-2">
                 <span className="font-medium">Error de conexión:</span> {errorCarga}
               </div>
-              <p className="text-xs text-gray-400 mt-2 px-1">
-                El backend requiere que el superadmin tenga rol 1 en el token, o que se modifique <code className="font-mono font-semibold">dependencies.py</code>.
-              </p>
+        
             </div>
           );
           return (
@@ -561,8 +570,10 @@ function CrearRolModal({ open, onClose, onCreado, permisosDisponibles }) {
   const [descripcion, setDescripcion] = useState("");
   const [plantilla, setPlantilla] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [creado, setCreado] = useState(false);
 
-  React.useEffect(() => { if (open) { setNombre(""); setDescripcion(""); setPlantilla(""); } }, [open]);
+  const [crearError, setCrearError] = useState(null);
+  React.useEffect(() => { if (open) { setNombre(""); setDescripcion(""); setPlantilla(""); setCrearError(null); setCreado(false); } }, [open]);
 
   const PLANTILLAS = [
     { key: "", label: "Sin plantilla — permisos vacíos", modulos: [] },
@@ -592,18 +603,43 @@ function CrearRolModal({ open, onClose, onCreado, permisosDisponibles }) {
           });
         }
       }
-      onCreado();
-      onClose();
+      await onCreado();
+      setCreado(true);
     } catch (e) {
-      alert("Error al crear rol: " + e.message);
+      setCrearError("Error al crear rol: " + e.message);
     } finally {
       setGuardando(false);
     }
   }
 
+  function handleClose() {
+    setCreado(false);
+    onClose();
+  }
+
+  if (creado) {
+    return (
+      <Modal open={open} onClose={handleClose} title="Rol creado">
+        <div className="text-center py-6">
+          <div className="flex justify-center mb-4">
+            <Check size={48} className="text-emerald-500" />
+          </div>
+          <p className="text-lg font-semibold text-gray-900 mb-2">Rol creado exitosamente</p>
+          <button onClick={handleClose}
+            className="px-6 py-2 text-sm font-medium text-white bg-indigo-800 rounded-lg hover:bg-indigo-900">
+            Cerrar
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title="Crear nuevo rol">
+    <Modal open={open} onClose={handleClose} title="Crear nuevo rol">
       <div className="space-y-4">
+        {crearError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{crearError}</div>
+        )}
         <div>
           <label htmlFor="rol-nombre" className="block text-xs font-medium text-gray-500 mb-1">Nombre del rol</label>
           <input id="rol-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
@@ -626,7 +662,7 @@ function CrearRolModal({ open, onClose, onCreado, permisosDisponibles }) {
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} disabled={guardando}
+          <button onClick={handleClose} disabled={guardando}
             className="px-4 py-2 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100">Cancelar</button>
           <button onClick={handleCrear} disabled={guardando || !nombre.trim()}
             className="px-4 py-2 text-sm font-medium text-white bg-indigo-800 rounded-lg hover:bg-indigo-900 disabled:bg-gray-300">
@@ -671,15 +707,29 @@ function generarCodigoPermiso(texto) {
     .replace(/\s+/g, "_");
 }
 
-function CrearPermisoModal({ open, onClose, onCreado, permisosDisponibles }) {
+function CrearPermisoModal({ open, onClose, onRefresh, onCreado, permisosDisponibles }) {
   const [descripcion, setDescripcion] = useState("");
   const [modulo, setModulo] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [permisoError, setPermisoError] = useState(null);
+  const [creado, setCreado] = useState(false);
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
 
-  React.useEffect(() => { if (open) { setDescripcion(""); setModulo(""); } }, [open]);
+  React.useEffect(() => {
+    if (open) {
+      setDescripcion(""); setModulo(""); setPermisoError(null); setCreado(false);
+      onRefreshRef.current?.();
+    }
+  }, [open]);
 
   const codigo = generarCodigoPermiso(descripcion);
   const duplicado = (permisosDisponibles || []).find((p) => p.codigo_permiso === codigo);
+
+  function handleClose() {
+    setCreado(false);
+    onClose();
+  }
 
   async function handleCrear() {
     if (!codigo.trim() || !modulo.trim() || duplicado) return;
@@ -693,10 +743,14 @@ function CrearPermisoModal({ open, onClose, onCreado, permisosDisponibles }) {
           modulo: modulo.trim(),
         }),
       });
-      onCreado();
-      onClose();
+      await onCreado();
+      setCreado(true);
     } catch (e) {
-      alert("Error al crear permiso: " + e.message);
+      const existente = (permisosDisponibles || []).find((p) => p.codigo_permiso === codigo)
+      const msg = e.message?.includes('Duplicate entry')
+        ? `El permiso "${codigo}" ya existe${existente ? ` como "${existente.descripcion}"` : ''}`
+        : e.message
+      setPermisoError("Error al crear permiso: " + msg);
     } finally {
       setGuardando(false);
     }
@@ -709,9 +763,29 @@ function CrearPermisoModal({ open, onClose, onCreado, permisosDisponibles }) {
     "SOCIAL": "Reseñas, colecciones y seguidores",
   };
 
+  if (creado) {
+    return (
+      <Modal open={open} onClose={handleClose} title="Permiso creado">
+        <div className="text-center py-6">
+          <div className="flex justify-center mb-4">
+            <Check size={48} className="text-emerald-500" />
+          </div>
+          <p className="text-lg font-semibold text-gray-900 mb-2">Permiso creado exitosamente</p>
+          <button onClick={handleClose}
+            className="px-6 py-2 text-sm font-medium text-white bg-indigo-800 rounded-lg hover:bg-indigo-900">
+            Cerrar
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title="Crear nuevo permiso" maxWidth="max-w-lg">
+    <Modal open={open} onClose={handleClose} title="Crear nuevo permiso" maxWidth="max-w-lg">
       <div className="space-y-5">
+        {permisoError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{permisoError}</div>
+        )}
         <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-sm text-indigo-800">
           <p className="font-medium mb-0.5">¿Qué es un permiso?</p>
           <p className="text-xs text-indigo-600">Un permiso es una acción específica que un rol puede realizar en el sistema. Por ejemplo: <span className="font-semibold">"Permite gestionar usuarios"</span>.</p>
@@ -762,7 +836,7 @@ function CrearPermisoModal({ open, onClose, onCreado, permisosDisponibles }) {
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} disabled={guardando}
+          <button onClick={handleClose} disabled={guardando}
             className="px-4 py-2 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100">Cancelar</button>
           <button onClick={handleCrear} disabled={guardando || !codigo.trim() || !modulo.trim() || duplicado}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-800 rounded-lg hover:bg-indigo-900 disabled:bg-gray-300">
@@ -773,9 +847,12 @@ function CrearPermisoModal({ open, onClose, onCreado, permisosDisponibles }) {
     </Modal>
   );
 }
-CrearPermisoModal.propTypes = { open: PropTypes.bool, onClose: PropTypes.func, onCreado: PropTypes.func, permisosDisponibles: PropTypes.array };
+CrearPermisoModal.propTypes = { open: PropTypes.bool, onClose: PropTypes.func, onRefresh: PropTypes.func, onCreado: PropTypes.func, permisosDisponibles: PropTypes.array };
 
-function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
+function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh, onDeleteRol, onDeletePermiso }) {
+  const DESCRIPCION_MAP = {
+    'VALIDAR_TICKETS_QR': 'Permite validar el código de entrada',
+  }
   const [tipo, setTipo] = useState("");
   const [mostrado, setMostrado] = useState(null);
   const [permisosAsignados, setPermisosAsignados] = useState([]);
@@ -783,6 +860,8 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
   const [creandoRol, setCreandoRol] = useState(false);
   const [creandoPermiso, setCreandoPermiso] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [eliminado, setEliminado] = useState(false);
   const [confirmarGuardar, setConfirmarGuardar] = useState(false);
   const [guardandoPermisos, setGuardandoPermisos] = useState(false);
   const [mensajeGuardar, setMensajeGuardar] = useState(null);
@@ -813,7 +892,7 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
     try {
       await apiFetch(`${API}/roles/${mostrado.id_role}/permisos`, { method: "PUT", body: JSON.stringify(permisosAsignados) });
       setPermisosModificados(false);
-      if (onRefresh) onRefresh();
+      if (onRefresh) await onRefresh();
       setMensajeGuardar({ tipo: "success", texto: "Permisos actualizados correctamente" });
     } catch (e) {
       setMensajeGuardar({ tipo: "error", texto: "Error al guardar permisos: " + e.message });
@@ -824,23 +903,34 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
 
   function pedirConfirmar(tipo, item) {
     setConfirmar({ tipo, item });
+    setEliminado(false);
+  }
+
+  function cerrarConfirmar() {
+    setConfirmar(null);
+    setEliminado(false);
   }
 
   async function ejecutarEliminar() {
     if (!confirmar) return;
     const { tipo, item } = confirmar;
-    setConfirmar(null);
+    setEliminando(true);
     try {
       if (tipo === "rol") {
         await apiFetch(`${API}/roles/${item.id_role}`, { method: "DELETE" });
+        if (onDeleteRol) onDeleteRol(item.id_role);
       } else {
         await apiFetch(`${API}/permisos/${item.id_permiso}`, { method: "DELETE" });
+        if (onDeletePermiso) onDeletePermiso(item.id_permiso);
       }
       setMostrado(null);
       setTipo("");
-      if (onRefresh) onRefresh();
+      setEliminado(true);
     } catch (e) {
-      alert("Error al eliminar " + (tipo === "rol" ? "rol" : "permiso") + ": " + e.message);
+      cerrarConfirmar();
+      setMensajeGuardar({ tipo: "error", texto: "Error al eliminar " + (tipo === "rol" ? "rol" : "permiso") + ": " + e.message });
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -918,7 +1008,7 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
                           <input type="checkbox" checked={permisosAsignados.includes(perm.id_permiso)}
                             onChange={() => togglePermiso(perm.id_permiso)}
                             className="rounded border-gray-300 text-indigo-700 focus:ring-indigo-500" />
-                          <span>{perm.descripcion}</span>
+                          <span>{DESCRIPCION_MAP[perm.codigo_permiso] || perm.descripcion} <span className="text-gray-400 text-xs">({perm.codigo_permiso})</span></span>
                         </label>
                         <button onClick={() => pedirConfirmar("permiso", perm)}
                           className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
@@ -935,30 +1025,48 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
         </div>
       )}
 
-      <CrearRolModal open={creandoRol} onClose={() => setCreandoRol(false)} onCreado={() => { if (onRefresh) onRefresh(); }} permisosDisponibles={permisosDisponibles} />
-      <CrearPermisoModal open={creandoPermiso} onClose={() => setCreandoPermiso(false)} onCreado={() => { if (onRefresh) onRefresh(); }} permisosDisponibles={permisosDisponibles} />
+      <CrearRolModal open={creandoRol} onClose={() => setCreandoRol(false)} onCreado={async () => { if (onRefresh) await onRefresh(); }} permisosDisponibles={permisosDisponibles} />
+      <CrearPermisoModal open={creandoPermiso} onClose={() => setCreandoPermiso(false)} onRefresh={onRefresh} onCreado={async () => { if (onRefresh) await onRefresh(); }} permisosDisponibles={permisosDisponibles} />
 
-      <Modal open={!!confirmar} onClose={() => setConfirmar(null)} title={confirmar?.tipo === "rol" ? "Eliminar rol" : "Eliminar permiso"} maxWidth="max-w-sm">
-        <div className="text-center py-2">
-          <div className="flex justify-center mb-4">
-            {confirmar?.tipo === "rol"
-              ? <Trash2 size={36} className="text-red-500" />
-              : <AlertTriangle size={36} className="text-amber-500" />
-            }
+      <Modal open={!!confirmar} onClose={cerrarConfirmar} title={eliminado ? (confirmar?.tipo === "rol" ? "Rol eliminado" : "Permiso eliminado") : (confirmar?.tipo === "rol" ? "Eliminar rol" : "Eliminar permiso")} maxWidth="max-w-sm">
+        {eliminado ? (
+          <div className="text-center py-4">
+            <div className="flex justify-center mb-4">
+              <Check size={48} className="text-emerald-500" />
+            </div>
+            <p className="text-lg font-semibold text-gray-900 mb-2">
+              {confirmar?.tipo === "rol" ? "Rol eliminado exitosamente" : "Permiso eliminado exitosamente"}
+            </p>
+            <button onClick={cerrarConfirmar}
+              className="px-6 py-2 text-sm font-medium text-white bg-indigo-800 rounded-lg hover:bg-indigo-900">
+              Cerrar
+            </button>
           </div>
-          <p className="text-sm text-gray-700 mb-6">
-            {confirmar?.tipo === "rol"
-              ? `¿Estás seguro de eliminar el rol "${confirmar?.item?.nombre_rol}"?`
-              : `¿Estás seguro de eliminar el permiso "${confirmar?.item?.descripcion}" (${confirmar?.item?.codigo_permiso})?`
-            }
-          </p>
-          <div className="flex justify-center gap-3">
-            <button onClick={() => setConfirmar(null)}
-              className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
-            <button onClick={ejecutarEliminar}
-              className="px-5 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Eliminar</button>
+        ) : (
+          <div className="text-center py-2">
+            <div className="flex justify-center mb-4">
+              {confirmar?.tipo === "rol"
+                ? <Trash2 size={36} className="text-red-500" />
+                : <AlertTriangle size={36} className="text-amber-500" />
+              }
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              {confirmar?.tipo === "rol"
+                ? `¿Estás seguro de eliminar el rol "${confirmar?.item?.nombre_rol}"?`
+                : `¿Estás seguro de eliminar el permiso "${confirmar?.item?.descripcion}" (${confirmar?.item?.codigo_permiso})?`
+              }
+            </p>
+            <div className="flex justify-center gap-3">
+              <button onClick={cerrarConfirmar} disabled={eliminando}
+                className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
+              <button onClick={ejecutarEliminar} disabled={eliminando}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {eliminando && <RefreshCw size={14} className="animate-spin" />}
+                {eliminando ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
 
       <Modal open={confirmarGuardar} onClose={() => { if (!guardandoPermisos) { setConfirmarGuardar(false); setMensajeGuardar(null); } }} title="Guardar cambios de permisos" maxWidth="max-w-md">
@@ -1006,7 +1114,7 @@ function RolesYPermisos({ rolesDisponibles, permisosDisponibles, onRefresh }) {
     </div>
   );
 }
-RolesYPermisos.propTypes = { rolesDisponibles: PropTypes.array, permisosDisponibles: PropTypes.array, onRefresh: PropTypes.func };
+RolesYPermisos.propTypes = { rolesDisponibles: PropTypes.array, permisosDisponibles: PropTypes.array, onRefresh: PropTypes.func, onDeleteRol: PropTypes.func, onDeletePermiso: PropTypes.func };
 
 function formatearFecha(iso) {
   if (!iso) return "-";
@@ -1208,6 +1316,7 @@ const TABS = [
 ];
 
 export default function GestionUsuarios() {
+  const { refreshPermisos } = useAuth();
   const [tab, setTab] = useState("directorio");
   const [rolesDisponibles, setRolesDisponibles] = useState([]);
   const [permisosDisponibles, setPermisosDisponibles] = useState([]);
@@ -1221,6 +1330,18 @@ export default function GestionUsuarios() {
   const fetchPermisos = useCallback(async () => {
     try { const data = await apiFetch(`${API}/permisos/`); setPermisosDisponibles(data || []); }
     catch (e) { setErrorGeneral(e.message); console.error("Error al cargar permisos:", e); }
+  }, []);
+
+  const handleRefreshPermisos = useCallback(async () => {
+    fetchRoles(); fetchPermisos(); await refreshPermisos();
+  }, [fetchRoles, fetchPermisos, refreshPermisos]);
+
+  const handleDeleteRol = useCallback((rolId) => {
+    setRolesDisponibles((prev) => prev.filter((r) => r.id_role !== rolId));
+  }, []);
+
+  const handleDeletePermiso = useCallback((permisoId) => {
+    setPermisosDisponibles((prev) => prev.filter((p) => p.id_permiso !== permisoId));
   }, []);
 
   useEffect(() => { fetchRoles(); fetchPermisos(); }, [fetchRoles, fetchPermisos]);
@@ -1251,7 +1372,7 @@ export default function GestionUsuarios() {
         {tab === "directorio" && <DirectorioUsuarios rolesDisponibles={rolesDisponibles} />}
         {tab === "roles" && (
           <RolesYPermisos rolesDisponibles={rolesDisponibles} permisosDisponibles={permisosDisponibles}
-            onRefresh={() => { fetchRoles(); fetchPermisos(); }} />
+            onRefresh={handleRefreshPermisos} onDeleteRol={handleDeleteRol} onDeletePermiso={handleDeletePermiso} />
         )}
         {tab === "log" && <LogDeActividad rolesDisponibles={rolesDisponibles} />}
       </div>

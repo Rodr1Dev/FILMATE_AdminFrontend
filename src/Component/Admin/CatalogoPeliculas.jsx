@@ -29,7 +29,7 @@ const handle = async (res) => {
 }
 
 const api = {
-  list:    (skip = 0, limit = 200) => fetch(`${ADMIN}/?skip=${skip}&limit=${limit}`, { headers: authHeaders() }).then(handle),
+  list:    (skip = 0, limit = 1000) => fetch(`${ADMIN}/?skip=${skip}&limit=${limit}`, { headers: authHeaders() }).then(handle),
   details: (id)                    => fetch(`${API_BASE}/movies/${id}/details`, { headers: authHeaders() }).then(handle),
   create:  (body)                  => fetch(`${ADMIN}/`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
