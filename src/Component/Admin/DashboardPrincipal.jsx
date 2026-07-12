@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import PropTypes from "prop-types"
+import { useAuth } from '../../context/useAuth.js'
 import {
   Film,
   Ticket,
@@ -241,6 +242,7 @@ DashboardPrincipal.propTypes = {
 }
 
 export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
+  const { permisos: userPermisos } = useAuth()
   const [period, setPeriod] = useState("Este mes")
   const [periodOpen, setPeriodOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -256,11 +258,12 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   useEffect(() => {
     const token = localStorage.getItem('filmate_token')
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {}
-    fetch('/api/admin/reports/generados', { headers })
+    const periodo = PERIOD_MAP[period]?.api ?? 'mes'
+    fetch(`/api/admin/reports/generados?periodo=${periodo}`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setReportesGen(d) })
       .catch(() => {})
-  }, [])
+  }, [period])
   const [salas, setSalas] = useState([])
   const [cineMap, setCineMap] = useState({})
   const [loading, setLoading] = useState(true)
@@ -271,8 +274,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
     setRefreshing(isAutoRefresh)
     setLoading(!isAutoRefresh)
     try {
-      const permisos = JSON.parse(localStorage.getItem('filmate_permisos') || '[]')
-      const puedeReembolsos = permisos.includes('GESTIONAR_REEMBOLSOS')
+      const puedeReembolsos = userPermisos.includes('GESTIONAR_REEMBOLSOS')
       const periodoApi = PERIOD_MAP[period]?.api ?? 'mes'
       const reembPromise = puedeReembolsos
         ? apiFetch(`${REEMBOLSOS_BASE}/metricas`)
@@ -306,7 +308,7 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [period])
+  }, [period, userPermisos])
 
   useEffect(() => {
     fetchData()
@@ -325,14 +327,14 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
 
   const periodTx = transactions.filter(tx => isTxInPeriod(tx.fecha_transaccion ? new Date(tx.fecha_transaccion) : null, period))
 
-  const paidTx = periodTx.filter(tx => tx.estado_pago === 'Aprobado' || tx.estado_pago === 'Completada')
+  const paidTx = periodTx.filter(tx => tx.estado_pago === 'Aprobado')
 
   const ventasTotales = ventasMes
 
-  const ingresosTotales = paidTx
-    .reduce((sum, tx) => sum + (tx.monto_total ?? 0), 0)
+  const ingresosTotales = dashData?.comparacion?.ingresos?.actual
+    ?? paidTx.reduce((sum, tx) => sum + (tx.monto_total ?? 0), 0)
 
-  const topMovie = calcTopMovie(paidTx)
+  const topMovie = dashData?.peliculaMasTaquillera ?? calcTopMovie(paidTx)
 
   const chartData = calcChartData(dashData, period)
 
@@ -533,8 +535,12 @@ function DashboardContent(props) {
           <div style={{ borderRadius: 16, border: '1px solid #F1F5F9', background: '#fff', padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', margin: 0 }}>Ventas Semanales</h2>
-                <p style={{ fontSize: 13, color: '#94A3B8', margin: '2px 0 0' }}>Tickets vendidos por día</p>
+                <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', margin: 0 }}>
+                  {({ "Hoy": "Ventas del Día", "Últimos 7 días": "Ventas Semanales", "Este mes": "Ventas Mensuales", "Mes anterior": "Ventas del Mes Anterior" }[period] || "Ventas")}
+                </h2>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: '2px 0 0' }}>
+                  {({ "Hoy": "Tickets vendidos hoy", "Últimos 7 días": "Tickets vendidos por día (última semana)", "Este mes": "Tickets vendidos por día (este mes)", "Mes anterior": "Tickets vendidos por día (mes anterior)" }[period] || "")}
+                </p>
               </div>
             </div>
             {chartData.length === 0 ? (

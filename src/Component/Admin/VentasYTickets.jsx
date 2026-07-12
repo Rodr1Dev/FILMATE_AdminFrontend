@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
+import { useAuth } from '../../context/useAuth.js'
 
 const VENTAS_BASE        = '/api/admin/transactions'
 const ADMIN_REEMBOLSOS   = '/api/admin/reembolsos'
@@ -69,6 +70,52 @@ function DownloadIcon({ size = 16, color = 'currentColor' }) {
 DownloadIcon.propTypes = {
   size: PropTypes.number,
   color: PropTypes.string,
+}
+
+function ToastFeedback({ tipo, mensaje, onClose }) {
+  useEffect(() => {
+    if (!mensaje) return
+    const t = setTimeout(onClose, 2500)
+    return () => clearTimeout(t)
+  }, [mensaje, onClose])
+
+  if (!mensaje) return null
+
+  const esExito = tipo === 'exito'
+  return (
+    <>
+      <style>{`@keyframes toastIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+      <div style={{
+        position: 'fixed', bottom: 28, right: 28, zIndex: 1500,
+        display: 'flex', alignItems: 'center', gap: 10,
+        background: esExito ? '#F0FDF4' : '#FFF1F2',
+        border: `1px solid ${esExito ? '#BBF7D0' : '#FECDD3'}`,
+        borderRadius: 12, padding: '14px 20px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+        fontSize: 14, fontWeight: 500,
+        color: esExito ? '#15803D' : '#BE123C',
+        animation: 'toastIn 0.22s cubic-bezier(.21,1.02,.73,1) both',
+      }}>
+        <span style={{
+          width: 22, height: 22, borderRadius: '50%',
+          background: esExito ? '#22C55E' : '#F43F5E',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0,
+        }}>{esExito ? '✓' : '✕'}</span>
+        <span>{mensaje}</span>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: esExito ? '#15803D' : '#BE123C', fontSize: 18,
+          marginLeft: 8, padding: 0, lineHeight: 1, opacity: 0.6,
+        }}>×</button>
+      </div>
+    </>
+  )
+}
+ToastFeedback.propTypes = {
+  tipo: PropTypes.string,
+  mensaje: PropTypes.string,
+  onClose: PropTypes.func,
 }
 
 function EstadoBadge({ estado }) {
@@ -243,6 +290,7 @@ const FECHA_OPTIONS = [
   { label: 'Hoy',             value: '1d' },
   { label: 'Esta semana',     value: '7d' },
   { label: 'Últimos 30 días', value: '30d' },
+  { label: 'Mes anterior',    value: 'mes_anterior' },
 ]
 
 const TIPO_OPTIONS = [
@@ -269,6 +317,7 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
       if (estado) params.append('estado', estado)
       if (fecha)  params.append('fecha',  fecha)
       if (buscar) params.append('buscar', buscar)
+      if (tipo)   params.append('tipo',   tipo)
       const res = await apiFetch(`${VENTAS_BASE}/?${params}`)
       setData(res)
     } catch (e) { setError(e.message) }
@@ -299,9 +348,6 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
     { label: 'Ticket Promedio',   value: m.ticketPromedio ? fmtMoney(m.ticketPromedio) : '—',     sub: 'Por pago',        icon: '📊' },
   ]
 
-  const filtered = tipo
-    ? transactions.filter(tx => detectTipoFromListItem(tx) === tipo)
-    : transactions
   const getMonto = (tx) => computedTotals[tx.id_transaccion] ?? tx.monto_total
 
   let tbodyContent
@@ -309,10 +355,10 @@ function TabHistorial({ onSelectTransaction, computedTotals = {} }) {
     tbodyContent = <LoadingRow colSpan={9} />
   } else if (error) {
     tbodyContent = <ErrorRow colSpan={9} message={error} />
-  } else if (filtered.length === 0) {
+  } else if (transactions.length === 0) {
     tbodyContent = <EmptyTableMessage colSpan={9} />
   } else {
-    tbodyContent = filtered.map(tx => (
+    tbodyContent = transactions.map(tx => (
       <tr key={tx.id_transaccion} style={{ borderTop: '1px solid #F3F4F6' }}>
         <td style={{ padding: '10px 14px', color: '#283593', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>
           {tx.transaccion_id || `#${tx.id_transaccion}`}
@@ -452,8 +498,8 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
   }
 
   return (
-    <button type="button"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 0 }}
       onClick={e => e.target === e.currentTarget && onClose()}
       onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <dialog open aria-label="Solicitar Reembolso"
@@ -500,7 +546,7 @@ function ReembolsoModal({ transaccionId, montoTotal, onClose, onCreated }) {
           </button>
         </div>
       </dialog>
-    </button>
+    </div>
   )
 }
 ReembolsoModal.propTypes = {
@@ -533,8 +579,8 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
   }
 
   return (
-    <button type="button"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 0 }}
       onClick={e => e.target === e.currentTarget && onClose()}
       onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
@@ -577,7 +623,7 @@ function ResolveModal({ solicitud, onClose, onResolved }) {
           </button>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 ResolveModal.propTypes = {
@@ -595,7 +641,7 @@ ResolveModal.propTypes = {
   onResolved: PropTypes.func.isRequired,
 }
 
-function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
+function TabDetalle({ reservationId, onBack, onUpdateTotal, puedeReembolsos }) {
   const [data,           setData]           = useState(null)
   const [loading,        setLoading]        = useState(false)
   const [error,          setError]          = useState(null)
@@ -603,6 +649,7 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
   const [showRefund,     setShowRefund]     = useState(false)
   const [resolveTarget,  setResolveTarget]  = useState(null)
   const [refreshKey,     setRefreshKey]     = useState(0)
+  const [toast,          setToast]          = useState(null)
   const onUpdateTotalRef = useRef(onUpdateTotal)
   useEffect(() => { onUpdateTotalRef.current = onUpdateTotal }, [onUpdateTotal])
 
@@ -614,10 +661,15 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
       apiFetch(`${ADMIN_REEMBOLSOS}/`).catch(() => []),
     ]).then(([txData, sols]) => {
       if (txData.boletos) {
-        const id = txData.id_transaccion || reservationId
-        txData.boletos = txData.boletos.map((b, i) => ({
+        txData.boletos = txData.boletos.map(b => ({
           ...b,
-          codigo_qr_token: b.codigo_qr_token || `QR-FILMATE-TXN${id}-X92`,
+          codigo_qr_token: b.codigo_qr_token || null,
+        }))
+      }
+      if (txData.detalles_asientos) {
+        txData.detalles_asientos = txData.detalles_asientos.map(d => ({
+          ...d,
+          codigo_qr_token: d.codigo_qr_token || null,
         }))
       }
       setData(txData)
@@ -628,6 +680,25 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
   }, [reservationId, refreshKey])
 
   const refreshSolicitudes = () => setRefreshKey(k => k + 1)
+
+  const handleDescargarPDF = async () => {
+    try {
+      const token = localStorage.getItem('filmate_token')
+      const res = await fetch(`${VENTAS_BASE}/${data?.id_transaccion}/pdf`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error('Error al descargar PDF')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `entrada_${data?.id_transaccion}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setToast?.({ tipo: 'error', mensaje: 'Error al descargar PDF: ' + e.message })
+    }
+  }
 
   if (!reservationId) return (
     <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 48, textAlign: 'center' }}>
@@ -645,14 +716,14 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
   if (error)   return <div style={{ padding: 40, textAlign: 'center', color: '#EF4444' }}>⚠️ {error}</div>
   if (!data)   return null
 
-  const pelicula    = data.pelicula || '—'
-  const sala        = data.sala || '—'
-  const fechaHora   = null
+  const pelicula    = data.pelicula || data.pelicula_titulo || '—'
+  const sala        = data.sala || data.sala_nombre || '—'
+  const cine        = data.cine || data.nombre_cine || ''
+  const fechaHora   = data.fecha_funcion || data.fecha_hora || null
+  const fechaCompra = data.fecha_transaccion ? new Date(data.fecha_transaccion) : null
   const asientos    = (data.boletos || []).map(b => b.asiento || '—').join(', ')
-  const codigosQR   = (data.boletos || [])
-    .map(b => b.codigo_qr_token)
-    .filter(Boolean)
-    .join(', ') || data.codigo_qr_token || '—'
+  const items = data.boletos || data.detalles_asientos || []
+  const codigoEntrada = items.map(b => b.codigo_qr_token || `QR-FILMATE-TXN${data.id_transaccion}-${b.id_detalle_asiento}`).join(', ') || '—'
 
   const pendienteSolicitud = solicitudes.some(s => s.estado_solicitud === 'Evaluacion')
 
@@ -669,14 +740,14 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
           transaccionId={reservationId}
           montoTotal={Number.parseFloat(data.monto_total || 0)}
           onClose={() => setShowRefund(false)}
-          onCreated={refreshSolicitudes}
+          onCreated={() => { refreshSolicitudes(); setToast({ tipo: 'exito', mensaje: 'Solicitud de reembolso creada' }) }}
         />
       )}
       {resolveTarget && (
         <ResolveModal
           solicitud={resolveTarget}
           onClose={() => setResolveTarget(null)}
-          onResolved={refreshSolicitudes}
+          onResolved={() => { refreshSolicitudes(); setToast({ tipo: 'exito', mensaje: 'Solicitud resuelta exitosamente' }) }}
         />
       )}
 
@@ -696,14 +767,12 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <EstadoBadge estado={data.estado_pago} />
-          <a
-            href={`${VENTAS_BASE}/${data.id_transaccion}/pdf`}
-            target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', fontSize: 13, fontWeight: 600, color: '#121212', textDecoration: 'none' }}>
+          <button onClick={handleDescargarPDF}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', fontSize: 13, fontWeight: 600, color: '#121212', cursor: 'pointer' }}>
             <DownloadIcon size={15} color="#374151" />
             Descargar PDF
-          </a>
-          {!pendienteSolicitud && data.estado_pago === 'Aprobado' && (
+          </button>
+          {!pendienteSolicitud && data.estado_pago === 'Aprobado' && puedeReembolsos && (
             <button onClick={() => setShowRefund(true)}
               style={{ padding: '7px 16px', border: '1px solid #FCA5A5', borderRadius: 8, background: '#FFF1F2', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#C2410C' }}>
               Solicitar Reembolso
@@ -728,13 +797,13 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
             <DetalleSectionTitle>Detalle de la Función</DetalleSectionTitle>
             <DetalleInfoGrid fields={[
               ['Película',     pelicula],
-              ['Sala',         sala],
-              ['Fecha y hora', fechaHora
-                ? fechaHora.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-                  ' – ' + fechaHora.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ' hrs'
+              ['Sala',         cine ? `${sala} · ${cine}` : sala],
+              ['Fecha de compra', fechaCompra
+                ? fechaCompra.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+                  ' – ' + fechaCompra.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ' hrs'
                 : '—'],
               ['Asientos',     asientos || '—'],
-              ['Código QR',    codigosQR],
+              ['Código de entrada', codigoEntrada],
               ['Boletos',      fmtMoney(data.monto_boletos || 0)],
               ['Confitería',   fmtMoney(data.monto_confiteria || 0)],
             ]} />
@@ -746,12 +815,11 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
               <div key={d.asiento || d.codigo_qr_token || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#121212' }}>Asiento {d.asiento || `${d.fila || ''}${d.columna || ''}` || '—'}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>{sala} · Entrada</p>
-                  {d.codigo_qr_token && (
-                    <p style={{ margin: '2px 0 0', fontSize: 11, fontFamily: 'monospace', color: '#283593' }}>QR: {d.codigo_qr_token}</p>
-                  )}
+                  <p style={{ margin: '2px 0 0', fontSize: 11, fontFamily: 'monospace', color: '#283593' }}>Entrada #{d.id_detalle_asiento}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10, fontFamily: 'monospace', color: '#6B7280', wordBreak: 'break-all' }}>Código: QR-FILMATE-TXN{data.id_transaccion}-{d.id_detalle_asiento}</p>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9CA3AF' }}>{sala} · {d.ingresado ? '✅ Ingresó' : '⏳ Pendiente'}</p>
                 </div>
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{fmtMoney(d.precio_pagado || data.monto_boletos / Math.max((data.boletos || data.detalles_asientos || []).length, 1))}</p>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{fmtMoney(d.precio_pagado || 0)}</p>
               </div>
             ))}
             {(data.snacks || data.detalles_confiteria || []).map((d, i) => (
@@ -862,14 +930,16 @@ function TabDetalle({ reservationId, onBack, onUpdateTotal }) {
 
 
         </div>
+      <ToastFeedback tipo={toast?.tipo} mensaje={toast?.mensaje} onClose={() => setToast(null)} />
       </div>
     </div>
   )
 }
 TabDetalle.propTypes = {
   reservationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  onBack: PropTypes.func,
+  onBack: PropTypes.func.isRequired,
   onUpdateTotal: PropTypes.func,
+  puedeReembolsos: PropTypes.bool,
 }
 
 const SOLICITUD_ESTADOS = [
@@ -890,19 +960,24 @@ function TabDevoluciones() {
   const [resolveTarget, setResolveTarget] = useState(null)
   const [detailTarget, setDetailTarget]   = useState(null)
   const [refreshKey,   setRefreshKey]   = useState(0)
-  const [now, setNow] = useState(0)
+  const [toast,        setToast]        = useState(null)
+  const [now, setNow] = useState(Date.now())
   useEffect(() => { setNow(Date.now()) }, [fecha])
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t) }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const params = new URLSearchParams({ page: 1, limit: 100 })
+      const params = new URLSearchParams({ page, limit: 100 })
+      if (estadoFiltro) params.set('estado', estadoFiltro)
+      if (fecha)        params.set('fecha', fecha)
+      if (buscar)       params.set('buscar', buscar)
       const sols = await apiFetch(`${ADMIN_REEMBOLSOS}/?${params}`)
       setData(sols || [])
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey])
+  }, [refreshKey, page, estadoFiltro, fecha, buscar])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -916,25 +991,8 @@ function TabDevoluciones() {
     setPage(1)
   }
 
-  const filtered = allSolicitudes.filter(s => {
-    if (estadoFiltro && s.estado_solicitud !== estadoFiltro) return false
-    if (buscar) {
-      const q = buscar.toLowerCase()
-      if (!`#${s.id_reembolso}`.includes(q) &&
-          !`#${s.id_transaccion}`.includes(q) &&
-          !(s.motivo || '').toLowerCase().includes(q)) return false
-    }
-    if (fecha && s.fecha_solicitud) {
-      const t = new Date(s.fecha_solicitud).getTime()
-      if (Number.isNaN(t)) return true
-      const dias = { '1d': 1, '7d': 7, '30d': 30 }[fecha]
-      if (dias && (now - t) > dias * 86400000) return false
-    }
-    return true
-  })
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
-  const paginated = filtered.slice((page - 1) * 10, page * 10)
+  const totalPages = Math.max(1, Math.ceil(allSolicitudes.length / 10))
+  const paginated = allSolicitudes.slice((page - 1) * 10, page * 10)
 
   const localEval  = allSolicitudes.filter(s => s.estado_solicitud === 'Evaluacion').length
   const localAprob = allSolicitudes.filter(s => s.estado_solicitud === 'Aprobada').length
@@ -992,12 +1050,12 @@ function TabDevoluciones() {
         <ResolveModal
           solicitud={resolveTarget}
           onClose={() => setResolveTarget(null)}
-          onResolved={() => { setRefreshKey(k => k + 1); setPage(1) }}
+          onResolved={() => { setRefreshKey(k => k + 1); setPage(1); setToast({ tipo: 'exito', mensaje: 'Solicitud resuelta exitosamente' }) }}
         />
       )}
       {detailTarget && (
-        <button type="button"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: 'none', padding: 0, cursor: 'pointer' }}
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 0 }}
           onClick={e => e.target === e.currentTarget && setDetailTarget(null)}
           onKeyDown={e => { if (e.key === 'Escape') setDetailTarget(null) }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
@@ -1036,7 +1094,7 @@ function TabDevoluciones() {
               <button onClick={() => setDetailTarget(null)} style={{ padding: '8px 20px', border: '1px solid #D1D5DC', borderRadius: 8, background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cerrar</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
@@ -1101,13 +1159,15 @@ function TabDevoluciones() {
             </tbody>
           </table>
         </div>
-        {filtered.length > 10 && (
+        {allSolicitudes.length > 10 && (
           <PaginationBar page={page} totalPages={totalPages} onPrev={() => setPage(p => p - 1)} onNext={() => setPage(p => p + 1)} />
         )}
       </div>
+      <ToastFeedback tipo={toast?.tipo} mensaje={toast?.mensaje} onClose={() => setToast(null)} />
     </div>
   )
 }
+TabDevoluciones.propTypes = {}
 
 const STORAGE_KEY_LOG = 'ventas_log_entries'
 const STORAGE_KEY_CODIGOS = 'ventas_codigos_usados'
@@ -1148,33 +1208,14 @@ function TabValidacion() {
   }
 
   const handleValidar = async () => {
-    const raw = codigoInput.trim()
-    if (!raw) { setError('Ingresa un código QR o escanea uno.'); return }
+    const codigo = codigoInput.trim()
+    if (!codigo) { setError('Ingresa un código de entrada.'); return }
     setError(null)
-
-    let codigo = raw
-    try {
-      const parsed = JSON.parse(raw)
-      const token = parsed?.boletos?.[0]?.codigo_qr_token || parsed?.codigo_qr_token
-      if (token) {
-        codigo = token
-      } else {
-        setError('El JSON no contiene un campo codigo_qr_token válido.')
-        return
-      }
-    } catch {
-      const esUUID = /^[0-9a-f]{32}$/i.test(raw)
-      const esQR   = /^[A-Z0-9_-]{8,64}$/i.test(raw)
-      if (!esUUID && !esQR) {
-        setError('Formato inválido. Debe ser un código QR (32 caracteres hex) o un JSON válido.')
-        return
-      }
-    }
 
     if (codigosUsadosEnSesion.has(codigo)) {
       const entradaYaUsada = {
         ticket_id: codigo,
-        hora:      new Date().toLocaleTimeString('es-PE'),
+        hora:      new Date().toLocaleString('es-PE'),
         cliente:   '—',
         asiento:   '—',
         resultado: 'Ya Usada',
@@ -1206,7 +1247,7 @@ function TabValidacion() {
       }
       setLogEntriesPersist(prev => [{
         ticket_id: codigo,
-        hora:      new Date().toLocaleTimeString('es-PE'),
+        hora:      new Date().toLocaleString('es-PE'),
         cliente:   res.cliente  || '—',
         asiento:   res.asiento  || '—',
         resultado: resultadoLabel,
@@ -1240,7 +1281,7 @@ function TabValidacion() {
             type="text" value={codigoInput}
             onChange={e => setCodigoInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleValidar()}
-            placeholder="Escanear código QR de la entrada"
+            placeholder="Ingresa código de entrada"
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
           />
           <button onClick={handleValidar} disabled={loading}
@@ -1295,7 +1336,7 @@ function TabValidacion() {
               {logEntries.length === 0
                 ? <EmptyTableMessage colSpan={5} message="Aún no se ha validado ninguna entrada." />
                 : logPaginado.map((e, i) => (
-                  <tr key={e.ticket_id || e.hora} style={{ borderTop: '1px solid #F3F4F6' }}>
+                  <tr key={i} style={{ borderTop: '1px solid #F3F4F6' }}>
                     <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#283593' }}>{e.ticket_id}</td>
                     <td style={{ padding: '10px 14px' }}>{e.hora}</td>
                     <td style={{ padding: '10px 14px' }}>{e.cliente}</td>
@@ -1319,33 +1360,41 @@ function TabValidacion() {
   )
 }
 
-const TABS = [
-  'Historial de Transacciones',
-  'Detalle de Compra',
-  'Devoluciones y Reembolsos',
-  'Validación de Entradas',
-]
-
 export default function VentasYTickets({ initialTxnId }) {
+  const { permisos } = useAuth()
   const [tabActiva,             setTabActiva]             = useState(0)
   const [selectedTransactionId, setSelectedTransactionId] = useState(null)
   const [computedTotals,        setComputedTotals]        = useState({})
 
-  useEffect(() => {
-    if (initialTxnId) {
-      setSelectedTransactionId(initialTxnId)
-      setTabActiva(1)
-    }
-  }, [initialTxnId])
+  const puedeVerHistorial = permisos.includes('VER_HISTORIAL_TXN')
+  const puedeReembolsos = permisos.includes('GESTIONAR_REEMBOLSOS')
+  const puedeValidar = permisos.includes('VALIDAR_TICKETS_QR')
 
   const handleSelectTransaction = (id) => {
     setSelectedTransactionId(id)
-    setTabActiva(1)
+    setTabActiva(puedeVerHistorial ? 1 : 0)
   }
 
   const handleUpdateTotal = (id, total) => {
     setComputedTotals(prev => ({ ...prev, [id]: total }))
   }
+
+  useEffect(() => {
+    if (initialTxnId) {
+      setSelectedTransactionId(initialTxnId)
+      setTabActiva(puedeVerHistorial ? 1 : 0)
+    }
+  }, [initialTxnId, puedeVerHistorial])
+
+  const historialTabIndex = puedeVerHistorial ? 0 : -1
+  const detalleTabIndex = puedeVerHistorial ? 1 : 0
+
+  const tabs = [
+    ...(puedeVerHistorial ? [{ label: 'Historial de Transacciones', content: <TabHistorial onSelectTransaction={handleSelectTransaction} computedTotals={computedTotals} /> }] : []),
+    { label: 'Detalle de Compra',           content: <TabDetalle reservationId={selectedTransactionId} onBack={() => setTabActiva(detalleTabIndex)} onUpdateTotal={handleUpdateTotal} puedeReembolsos={puedeReembolsos} /> },
+    ...(puedeReembolsos ? [{ label: 'Devoluciones y Reembolsos', content: <TabDevoluciones /> }] : []),
+    ...(puedeValidar    ? [{ label: 'Validar Entrada',    content: <TabValidacion /> }] : []),
+  ]
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
@@ -1358,21 +1407,18 @@ export default function VentasYTickets({ initialTxnId }) {
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', borderBottom: '2px solid #E5E7EB' }}>
-          {TABS.map((tab, i) => (
-            <button key={tab} onClick={() => setTabActiva(i)} style={{
+          {tabs.map((tab, i) => (
+            <button key={tab.label} onClick={() => setTabActiva(i)} style={{
               padding: '10px 20px', fontSize: 14, fontWeight: 500, cursor: 'pointer',
               border: 'none', borderBottom: tabActiva === i ? '2px solid #283593' : '2px solid transparent',
               background: 'transparent', color: tabActiva === i ? '#283593' : '#6B7280',
               marginBottom: -2, whiteSpace: 'nowrap',
-            }}>{tab}</button>
+            }}>{tab.label}</button>
           ))}
         </div>
       </div>
 
-      {tabActiva === 0 && <TabHistorial onSelectTransaction={handleSelectTransaction} computedTotals={computedTotals} />}
-      {tabActiva === 1 && <TabDetalle reservationId={selectedTransactionId} onBack={() => setTabActiva(0)} onUpdateTotal={handleUpdateTotal} />}
-      {tabActiva === 2 && <TabDevoluciones />}
-      {tabActiva === 3 && <TabValidacion />}
+      {tabs[tabActiva]?.content}
     </div>
   )
 }
