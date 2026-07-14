@@ -936,7 +936,13 @@ export default function Reportes() {
           <SummaryCard
             icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>}
             label="Snacks Vendidos"
-            value={(resumen?.total_snacks || data.reduce((s, r) => s + (r.items_confiteria || 0), 0)).toLocaleString()}
+            value={(resumen?.total_snacks || data.reduce((s, r) => {
+              if (!r.confiteria) return s
+              return s + r.confiteria.split(',').reduce((sum, item) => {
+                const m = item.trim().match(/(\d+)$/)
+                return sum + (m ? parseInt(m[1]) : 0)
+              }, 0)
+            }, 0)).toLocaleString()}
             sub="Productos de confitería"
           />
         </div>
