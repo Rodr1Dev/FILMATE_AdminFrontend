@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://filmate-backend-vnnd.onrender.com/:path*" },
+    { "source": "/api/(.*)", "destination": "https://filmate-backend-vnnd.onrender.com/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
