@@ -312,7 +312,9 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
 
   useEffect(() => {
     fetchData()
-    intervalRef.current = setInterval(() => fetchData(true), 30000)
+    intervalRef.current = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData(true)
+    }, 30000)
     return () => clearInterval(intervalRef.current)
   }, [fetchData])
 

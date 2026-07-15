@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
+import { useNavigate } from 'react-router-dom'
 import { ChevronDown, FileText, Download, ChevronLeft, ChevronRight, Ticket } from 'lucide-react'
 
 const REPORTES_BASE = '/api/admin/reports'
@@ -26,25 +27,6 @@ const DATE_RANGES = [
 ]
 
 const PAGE_SIZE = 10
-
-
-
-async function apiFetch(url, opts = {}) {
-  const headers = { 'Content-Type': 'application/json' }
-  const token = localStorage.getItem('filmate_token')
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(url, { headers, ...opts })
-  if (res.status === 401) {
-    localStorage.removeItem('filmate_token')
-    localStorage.removeItem('filmate_user')
-    globalThis.location.href = '/login'
-    return { data: [], resumen: {} }
-  }
-  if (!res.ok) {
-    return { data: [], resumen: {} }
-  }
-  return res.json()
-}
 
 function formatCurrency(n) {
   return 'S/. ' + n.toLocaleString('es-PE', { minimumFractionDigits: 2 })
@@ -341,6 +323,7 @@ Pagination.propTypes = {
 }
 
 export default function Reportes() {
+  const navigate = useNavigate()
   const [reportType, setReportType] = useState(REPORT_TYPES[0])
   const [dateRange, setDateRange] = useState(DATE_RANGES[0])
   const [error, setError] = useState(null)
@@ -351,6 +334,23 @@ export default function Reportes() {
   const [showOverlay, setShowOverlay] = useState(false)
   const [updated, setUpdated] = useState(false)
   const overlayRef = useRef(null)
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json' }
+    const token = localStorage.getItem('filmate_token')
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(url, { headers, ...opts })
+    if (res.status === 401) {
+      localStorage.removeItem('filmate_token')
+      localStorage.removeItem('filmate_user')
+      navigate('/login', { replace: true })
+      return { data: [], resumen: {} }
+    }
+    if (!res.ok) {
+      return { data: [], resumen: {} }
+    }
+    return res.json()
+  }
 
   useEffect(() => {
     if (!showOverlay) return
@@ -440,7 +440,7 @@ export default function Reportes() {
         if (res.status === 401) {
           localStorage.removeItem('filmate_token')
           localStorage.removeItem('filmate_user')
-          globalThis.location.href = '/login'
+          navigate('/login', { replace: true })
           return null
         }
         if (!res.ok) { setExporting(false); return null }

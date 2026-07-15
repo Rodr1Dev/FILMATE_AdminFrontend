@@ -105,22 +105,19 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('filmate_token')
     const headers = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
-    Promise.all([
-      fetch('/api/admin/notifications/', { headers }),
-      fetchPermisos(),
-    ])
-      .then(([notifRes]) => {
-        if (!notifRes.ok) throw new Error('Sesión inválida')
+    fetch('/api/admin/notifications/', { headers })
+      .then(notifRes => {
+        if (notifRes.status === 401) {
+          localStorage.removeItem(USER_KEY)
+          localStorage.removeItem('filmate_token')
+          localStorage.removeItem(PERMISOS_KEY)
+          setUser(null)
+          setPermisos([])
+        }
       })
-      .catch(() => {
-        localStorage.removeItem(USER_KEY)
-        localStorage.removeItem('filmate_token')
-        localStorage.removeItem(PERMISOS_KEY)
-        setUser(null)
-        setPermisos([])
-      })
+      .catch(() => {})
       .finally(() => setVerifying(false))
-  }, [user, fetchPermisos])
+  }, [user])
 
   useEffect(() => {
     if (!user) return
