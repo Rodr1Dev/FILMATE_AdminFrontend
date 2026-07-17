@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import PropTypes from "prop-types"
 import { useAuth } from '../../context/useAuth.js'
 import {
@@ -28,11 +28,7 @@ import {
 } from "recharts"
 
 const DASHBOARD_BASE    = '/api/admin/dashboard'
-const TRANSACTIONS_BASE = '/api/admin/transactions'
 const REEMBOLSOS_BASE   = '/api/admin/reembolsos'
-const ROOMS_BASE        = '/api/admin/rooms'
-const SHOWTIMES_BASE    = '/api/admin/showtimes'
-const CINEMAS_BASE      = '/api/cinemas'
 
 async function apiFetch(url, opts = {}) {
   const token = localStorage.getItem('filmate_token')
@@ -49,19 +45,6 @@ async function apiFetch(url, opts = {}) {
   return res.json()
 }
 
-async function safeApiFetch(url, fallback) {
-  try {
-    const token = localStorage.getItem('filmate_token')
-    const headers = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    const res = await fetch(url, { headers })
-    if (!res.ok) return fallback
-    return res.json()
-  } catch {
-    return fallback
-  }
-}
-
 function ensureArray(data) {
   return Array.isArray(data) ? data : []
 }
@@ -70,20 +53,6 @@ function buildCineMap(cinemas) {
   const cmap = {}
   cinemas.forEach(c => { cmap[c.id_cine] = c.nombre_cine })
   return cmap
-}
-
-function buildRoomMap(rooms) {
-  const rmap = {}
-  rooms.forEach(r => { rmap[r.id_sala] = r.capacidad_asientos ?? 0 })
-  return rmap
-}
-
-function calcTotalCapacity(showtimes, roomMap) {
-  return ensureArray(showtimes).reduce((sum, s) => sum + (roomMap[s.id_sala] ?? 0), 0)
-}
-
-function shouldCalcOccupancy(dash, totalCapacity) {
-  return totalCapacity > 0 && (!dash.ocupacionPromedio || dash.ocupacionPromedio === 0)
 }
 
 function calcTopMovie(paidTx) {
@@ -279,29 +248,21 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
       const reembPromise = puedeReembolsos
         ? apiFetch(`${REEMBOLSOS_BASE}/metricas`)
         : Promise.resolve({ pendientes: 0 })
-      const [dash, txData, reembData, roomsData, showtimes, cinemasData] = await Promise.all([
+      const [dash, reembData] = await Promise.all([
         apiFetch(`${DASHBOARD_BASE}/?periodo=${periodoApi}`),
-        apiFetch(`${TRANSACTIONS_BASE}/?page=1&limit=500`),
         reembPromise,
-        safeApiFetch(`${ROOMS_BASE}/`, []),
-        safeApiFetch(`${SHOWTIMES_BASE}/`, []),
-        safeApiFetch(`${CINEMAS_BASE}/`, []),
       ])
       setDashData(dash)
-      setTransactions(txData.data ?? [])
-      const totalVentas = txData.metricas?.ventasMes ?? 0
+      setTransactions(dash.ultimasTransacciones ?? [])
+      const totalVentas = dash.ventasMes ?? dash.comparacion?.ventas?.actual ?? 0
       setVentasMes(totalVentas)
       setPendientes(reembData.pendientes ?? 0)
-      const rooms = ensureArray(roomsData)
+      const rooms = ensureArray(dash.salas)
       setSalas(rooms)
-      setCineMap(buildCineMap(ensureArray(cinemasData)))
-
-      const roomMap = buildRoomMap(rooms)
-      const totalCapacity = calcTotalCapacity(showtimes, roomMap)
-
-      if (shouldCalcOccupancy(dash, totalCapacity)) {
-        dash.ocupacionPromedio = Number.parseFloat(((totalVentas / totalCapacity) * 100).toFixed(2))
-      }
+      setCineMap(buildCineMap(rooms.map((room) => ({
+        id_cine: room.id_cine,
+        nombre_cine: room.nombre_cine,
+      }))))
     } catch {
       /* ignore */
     } finally {
@@ -325,22 +286,40 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
   const today = new Date()
   const dateStr = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  const periodTx = transactions.filter(tx => isTxInPeriod(tx.fecha_transaccion ? new Date(tx.fecha_transaccion) : null, period))
+  const periodTx = useMemo(
+    () => transactions.filter(tx => isTxInPeriod(tx.fecha_transaccion ? new Date(tx.fecha_transaccion) : null, period)),
+    [period, transactions]
+  )
 
-  const paidTx = periodTx.filter(tx => tx.estado_pago === 'Aprobado')
+  const paidTx = useMemo(
+    () => periodTx.filter(tx => tx.estado_pago === 'Aprobado'),
+    [periodTx]
+  )
 
   const ventasTotales = ventasMes
 
   const ingresosTotales = dashData?.comparacion?.ingresos?.actual
     ?? paidTx.reduce((sum, tx) => sum + (tx.monto_total ?? 0), 0)
 
-  const topMovie = dashData?.peliculaMasTaquillera ?? calcTopMovie(paidTx)
+  const topMovie = useMemo(
+    () => dashData?.peliculaMasTaquillera ?? calcTopMovie(paidTx),
+    [dashData?.peliculaMasTaquillera, paidTx]
+  )
 
-  const chartData = calcChartData(dashData, period)
+  const chartData = useMemo(
+    () => calcChartData(dashData, period),
+    [dashData, period]
+  )
 
-  const salaCategoriaMap = buildSalaCategoriaMap(salas)
+  const salaCategoriaMap = useMemo(
+    () => buildSalaCategoriaMap(salas),
+    [salas]
+  )
 
-  const categoryData = calcCategoryData(dashData, paidTx, salaCategoriaMap)
+  const categoryData = useMemo(
+    () => calcCategoryData(dashData, paidTx, salaCategoriaMap),
+    [dashData, paidTx, salaCategoriaMap]
+  )
 
   useEffect(() => {
     globalThis.__debugDash = { categoryData, chartData, periodTx, transactions, ventasTotales, ingresosTotales, topMovie }
@@ -348,7 +327,10 @@ export default function DashboardPrincipal({ onNavigate, onViewTransaction }) {
 
   const cmp = dashData?.comparacion ?? {}
 
-  const filteredTx = filterTransactions(transactions, period, estadoFilter, salaFilter, search)
+  const filteredTx = useMemo(
+    () => filterTransactions(transactions, period, estadoFilter, salaFilter, search),
+    [estadoFilter, period, salaFilter, search, transactions]
+  )
 
   if (loading) {
     return (<><style>{DASHBOARD_CSS}</style><div style={{ padding: '28px 28px 40px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}><div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300, color: '#94A3B8', fontSize: 14 }}>Cargando dashboard...</div></div></>)
