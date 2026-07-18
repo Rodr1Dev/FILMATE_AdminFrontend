@@ -1,16 +1,17 @@
-import React, { useState } from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import PropTypes from 'prop-types'
 import MenuPrincipal from './MenuPrincipal.jsx'
 import Header from './Header.jsx'
 import DashboardPrincipal from './Admin/DashboardPrincipal.jsx'
-import VentasYTickets from './Admin/VentasYTickets.jsx'
-import CatalogoPeliculas from './Admin/CatalogoPeliculas.jsx'
-import Programacion from './Admin/Programacion.jsx'
-import CinesYSalas from './Admin/CinesYSalas.jsx'
-import Reportes from './Admin/Reportes.jsx'
-import AyudaSoporte from './Admin/AyudaSoporte.jsx'
-import ConfiguracionPrecios from './Admin/ConfiguracionPrecios.jsx'
-import GestionUsuarios from './Admin/GestionUsuarios.jsx'
+
+const VentasYTickets = lazy(() => import('./Admin/VentasYTickets.jsx'))
+const CatalogoPeliculas = lazy(() => import('./Admin/CatalogoPeliculas.jsx'))
+const Programacion = lazy(() => import('./Admin/Programacion.jsx'))
+const CinesYSalas = lazy(() => import('./Admin/CinesYSalas.jsx'))
+const Reportes = lazy(() => import('./Admin/Reportes.jsx'))
+const AyudaSoporte = lazy(() => import('./Admin/AyudaSoporte.jsx'))
+const ConfiguracionPrecios = lazy(() => import('./Admin/ConfiguracionPrecios.jsx'))
+const GestionUsuarios = lazy(() => import('./Admin/GestionUsuarios.jsx'))
 
 // Placeholder for other sections
 function PlaceholderView({ nombre }) {
@@ -26,6 +27,14 @@ function PlaceholderView({ nombre }) {
 
 PlaceholderView.propTypes = {
   nombre: PropTypes.string,
+}
+
+function LoadingView() {
+  return (
+    <div style={{ padding: '28px 28px 40px', color: '#64748B', fontSize: 14 }}>
+      Cargando módulo...
+    </div>
+  )
 }
 
 export default function MainLayout() {
@@ -66,7 +75,9 @@ export default function MainLayout() {
       }}>
         <Header />
         <div style={{ flex: 1, padding: '0 0 32px 0' }}>
-          {renderView()}
+          <Suspense fallback={<LoadingView />}>
+            {renderView()}
+          </Suspense>
         </div>
       </div>
     </div>
