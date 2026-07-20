@@ -9,15 +9,24 @@ Filmate Admin es una interfaz web orientada a proporcionar herramientas de gesti
 - React 19
 - Vite
 - React Router
-- Tailwind CSS 4
+- Tailwind CSS 3
 - Lucide React para iconos
+- Recharts para graficos
+- jsPDF para exportacion de reportes
 
 ## Funcionalidades
 
 - Pantalla de inicio de sesion exclusiva para administradores y personal.
 - Dashboard principal con resumen operativo y metricas.
-- Gestion de catalogo de peliculas.
-- Gestion y visualizacion de ventas y tickets.
+- Gestion de catalogo de peliculas (busqueda en TMDb, preview, creacion y edicion).
+- Gestion de cines, salas y asientos.
+- Programacion de funciones.
+- Gestion de ventas y tickets (detalle de transacciones, validacion QR).
+- Gestion de usuarios y roles (asignacion de permisos).
+- Configuracion de precios y parametros del sistema.
+- Reportes de taquilla, ocupacion de salas, ventas por horario y analisis de peliculas (exportables a Excel y CSV).
+- Modulo de ayuda y soporte.
+- Autenticacion basada en roles (Superadmin / Administrador).
 - Navegacion entre vistas administrativas con React Router.
 - Layout principal reutilizable para todo el entorno administrativo.
 - Header y menu principal reutilizables.
@@ -33,15 +42,17 @@ Filmate Admin es una interfaz web orientada a proporcionar herramientas de gesti
 1. Clona el repositorio.
 2. Instala dependencias:
 
-````bash
+```bash
 npm install
+```
+
 ## Scripts disponibles
 
 ### Desarrollo
 
 ```bash
 npm run dev
-````
+```
 
 Inicia Vite en modo desarrollo.
 
@@ -72,24 +83,39 @@ Ejecuta ESLint sobre el proyecto.
 ## Estructura del proyecto
 
 ```text
-FILMATE_AdminFrontend/
-├── .github/
-│   └── ISSUE_TEMPLATE/
-│       └── solicitud-de-cambio--rfc-.md
-├── dist/
-├── node_modules/
+frontend-admin/
+├── docs-manual-admin/
+│   ├── capturas/
+│   ├── Manual_de_Administrador_FILMATE.docx
+│   ├── Manual_de_Administrador_FILMATE.md
+│   └── Manual_de_Administrador_FILMATE.pdf
 ├── src/
 │   ├── Component/
 │   │   ├── Admin/
+│   │   │   ├── AyudaSoporte.jsx
 │   │   │   ├── CatalogoPeliculas.css
 │   │   │   ├── CatalogoPeliculas.jsx
+│   │   │   ├── CinesYSalas.css
+│   │   │   ├── CinesYSalas.jsx
+│   │   │   ├── ConfiguracionPrecios.jsx
+│   │   │   ├── DashboardPrincipal.jsx
+│   │   │   ├── GestionUsuarios.jsx
+│   │   │   ├── Programacion.css
+│   │   │   ├── Programacion.jsx
+│   │   │   ├── Reportes.jsx
 │   │   │   └── VentasYTickets.jsx
 │   │   ├── Header.jsx
+│   │   ├── LoginPage.jsx
 │   │   ├── MainLayout.jsx
 │   │   └── MenuPrincipal.jsx
+│   ├── context/
+│   │   ├── AuthContext.js
+│   │   ├── AuthContext.jsx
+│   │   └── useAuth.js
 │   ├── App.jsx
 │   ├── index.css
 │   └── main.jsx
+├── .eslintrc.json
 ├── .gitattributes
 ├── .gitignore
 ├── eslint.config.js
@@ -98,16 +124,30 @@ FILMATE_AdminFrontend/
 ├── package.json
 ├── postcss.config.js
 ├── README.md
+├── scripts/
 ├── tailwind.config.js
 └── vite.config.js
 ```
 
-## Rutas principales
+## Vistas del sistema
 
-- `/` -> Inicio de sesion administrativo
-- `/dashboard` -> Dashboard principal
-- `/catalogoPeliculas` -> Gestion de catalogo de peliculas
-- `/ventasTickets` -> Gestion de ventas y tickets
+La navegacion se maneja internamente mediante un menu lateral. Las vistas disponibles son:
+
+| Vista | Descripcion |
+|---|---|
+| Dashboard Principal | Resumen operativo con metricas y graficos |
+| Reportes | Reportes de taquilla, ocupacion, ventas por horario y analisis de peliculas (exportables a Excel/CSV) |
+| Catalogo de Peliculas | Gestion del catalogo (busqueda TMDb, preview, creacion, edicion y eliminacion suave) |
+| Cines y Salas | Gestion de cines, salas y asientos |
+| Programacion | Gestion de funciones |
+| Ventas y Tickets | Detalle de transacciones, validacion de tickets QR |
+| Usuarios y Roles | Gestion de usuarios, roles y permisos |
+| Configuracion y Precios | Parametros del sistema y configuracion de precios |
+| Ayuda y Soporte | Manual de administrador y soporte |
+
+### Autenticacion
+
+- `/login` -> Inicio de sesion administrativo
 
 ## Estrategia de ramas
 
