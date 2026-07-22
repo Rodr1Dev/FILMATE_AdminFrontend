@@ -714,7 +714,10 @@ function CrearPermisoModal({ open, onClose, onRefresh, onCreado, permisosDisponi
   const [permisoError, setPermisoError] = useState(null);
   const [creado, setCreado] = useState(false);
   const onRefreshRef = useRef(onRefresh);
-  onRefreshRef.current = onRefresh;
+
+  React.useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   React.useEffect(() => {
     if (open) {
