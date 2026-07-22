@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
+import jsQR from 'jsqr'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import { useAuth } from '../../context/useAuth.js'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 const VENTAS_BASE        = '/api/admin/transactions'
 const ADMIN_REEMBOLSOS   = '/api/admin/reembolsos'
@@ -961,7 +966,7 @@ function TabDevoluciones() {
   const [detailTarget, setDetailTarget]   = useState(null)
   const [refreshKey,   setRefreshKey]   = useState(0)
   const [toast,        setToast]        = useState(null)
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => { setNow(Date.now()) }, [fecha])
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t) }, [])
 
@@ -1188,13 +1193,59 @@ let _resultado  = null
 
 const LOG_PER_PAGE = 10
 
+function decodeQrFromCanvas(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return null
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  return jsQR(imageData.data, imageData.width, imageData.height)?.data || null
+}
+
+async function renderPdfFirstPageToCanvas(file) {
+  const data = new Uint8Array(await file.arrayBuffer())
+  const loadingTask = pdfjsLib.getDocument({ data })
+  const pdf = await loadingTask.promise
+  try {
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 3 })
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    await page.render({ canvasContext: ctx, viewport }).promise
+    return canvas
+  } finally {
+    pdf.destroy()
+  }
+}
+
+async function renderImageToCanvas(file) {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close?.()
+  return canvas
+}
+
+async function leerQrDesdeArchivo(file) {
+  const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  const canvas = esPdf ? await renderPdfFirstPageToCanvas(file) : await renderImageToCanvas(file)
+  const codigo = decodeQrFromCanvas(canvas)
+  if (!codigo) throw new Error('No se encontró un código QR legible en el archivo seleccionado.')
+  return codigo.trim()
+}
+
 function TabValidacion() {
   const [codigoInput, setCodigoInput]   = useState('')
   const [resultado,   setResultado]     = useState(_resultado)
   const [loading,     setLoading]       = useState(false)
+  const [leyendoQr,    setLeyendoQr]     = useState(false)
   const [error,       setError]         = useState(null)
   const [logEntries,  setLogEntries]    = useState(_logEntries)
   const [logPage,     setLogPage]       = useState(1)
+  const fileInputRef = useRef(null)
 
   const setLogEntriesPersist = (v) => {
     _logEntries = typeof v === 'function' ? v(_logEntries) : v
@@ -1207,8 +1258,8 @@ function TabValidacion() {
     setResultado(_resultado)
   }
 
-  const handleValidar = async () => {
-    const codigo = codigoInput.trim()
+  const validarCodigo = async (codigoRaw) => {
+    const codigo = codigoRaw.trim()
     if (!codigo) { setError('Ingresa un código de entrada.'); return }
     setError(null)
 
@@ -1257,6 +1308,24 @@ function TabValidacion() {
     finally { setLoading(false) }
   }
 
+  const handleValidar = () => validarCodigo(codigoInput)
+
+  const handleArchivoQr = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setLeyendoQr(true); setError(null); setResultadoPersist(null)
+    try {
+      const codigo = await leerQrDesdeArchivo(file)
+      setCodigoInput(codigo)
+      await validarCodigo(codigo)
+    } catch (err) {
+      setError(err.message || 'No se pudo leer el QR del archivo.')
+    } finally {
+      setLeyendoQr(false)
+    }
+  }
+
   const validadas = logEntries.filter(e => e.resultado === 'Válida').length
   const invalidas = logEntries.filter(e => e.resultado !== 'Válida').length
 
@@ -1284,6 +1353,17 @@ function TabValidacion() {
             placeholder="Ingresa código de entrada"
             style={{ width: '100%', border: '1px solid #D1D5DC', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,image/*"
+            onChange={handleArchivoQr}
+            style={{ display: 'none' }}
+          />
+          <button onClick={() => fileInputRef.current?.click()} disabled={loading || leyendoQr}
+            style={{ width: '100%', background: '#fff', color: '#283593', border: '1px solid #283593', borderRadius: 8, padding: 9, fontSize: 14, fontWeight: 600, cursor: loading || leyendoQr ? 'not-allowed' : 'pointer', marginBottom: 10 }}>
+            {leyendoQr ? 'Leyendo QR…' : 'Cargar PDF o imagen'}
+          </button>
           <button onClick={handleValidar} disabled={loading}
             style={{ width: '100%', background: loading ? '#9CA3AF' : '#283593', color: '#fff', border: 'none', borderRadius: 8, padding: 9, fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Validando…' : 'Validar'}
